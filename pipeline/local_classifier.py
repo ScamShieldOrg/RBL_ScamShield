@@ -17,6 +17,17 @@ import math
 import re
 import logging
 from typing import Dict, List, Optional, Any, Tuple
+import numpy as np
+
+try:
+    import onnxruntime as ort
+except ImportError:
+    ort = None
+
+try:
+    from tokenizers import Tokenizer
+except ImportError:
+    Tokenizer = None
 
 logger = logging.getLogger("ScamShield.LocalClassifier")
 if not logger.handlers:
@@ -53,32 +64,70 @@ class LocalViSoBERTClassifier:
         """
         base_dir = os.path.dirname(os.path.dirname(__file__))
         self.release_dir = os.path.join(base_dir, "visobert_5runs_release")
-        self.model_path = model_path or (self.release_dir if os.path.exists(self.release_dir) else os.path.join(base_dir, "models", "visobert_tier1.onnx"))
+        
+        # Priority: Quantized INT8 ONNX > Full ONNX > release folder
+        int8_onnx = os.path.join(self.release_dir, "visobert_tier1_int8.onnx")
+        full_onnx = os.path.join(self.release_dir, "visobert_tier1.onnx")
+        models_int8 = os.path.join(base_dir, "models", "visobert_tier1_int8.onnx")
+        models_full = os.path.join(base_dir, "models", "visobert_tier1.onnx")
+        
+        if model_path:
+            self.model_path = model_path
+        elif os.path.exists(int8_onnx):
+            self.model_path = int8_onnx
+        elif os.path.exists(models_int8):
+            self.model_path = models_int8
+        elif os.path.exists(full_onnx):
+            self.model_path = full_onnx
+        elif os.path.exists(models_full):
+            self.model_path = models_full
+        else:
+            self.model_path = self.release_dir
+
         self.config_path = config_path or os.path.join(base_dir, "models", "scamshield_config.json")
         self.enable_regex_heuristics = enable_regex_heuristics
 
         # Load config if available
         self.temperature = temperature
         self.cost_alpha = cost_alpha
-        self.has_onnx = os.path.exists(self.model_path) and self.model_path.endswith(".onnx")
-        self.pytorch_model = None
         self.tokenizer = None
+        self.onnx_session = None
+        self.pytorch_model = None
 
-        # Attempt to load 5-runs PyTorch release model
-        try:
-            tok_json_path = os.path.join(self.release_dir, "tokenizer.json") if os.path.exists(self.release_dir) else None
-            if tok_json_path and os.path.exists(tok_json_path):
-                from tokenizers import Tokenizer
-                import torch
-                from transformers import AutoModelForSequenceClassification
+        # 1. Initialize Tokenizer
+        tok_json_path = os.path.join(self.release_dir, "tokenizer.json")
+        if os.path.exists(tok_json_path) and Tokenizer is not None:
+            try:
                 self.tokenizer = Tokenizer.from_file(tok_json_path)
                 self.tokenizer.enable_padding(length=128, pad_id=1, pad_token='<pad>')
                 self.tokenizer.enable_truncation(max_length=128)
+                logger.info(f"Successfully loaded Tokenizer from {tok_json_path}")
+            except Exception as e:
+                logger.warning(f"Could not load Tokenizer from {tok_json_path}: {e}")
+
+        # 2. Initialize Real ONNX Runtime Inference Session (Primary)
+        self.has_onnx = False
+        if ort is not None and os.path.exists(self.model_path) and self.model_path.endswith(".onnx"):
+            try:
+                session_options = ort.SessionOptions()
+                session_options.intra_op_num_threads = min(4, os.cpu_count() or 4)
+                session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                self.onnx_session = ort.InferenceSession(self.model_path, sess_options=session_options, providers=["CPUExecutionProvider"])
+                self.has_onnx = True
+                logger.info(f"Successfully initialized Tier 1 ONNX INT8 Session: {self.model_path}")
+            except Exception as e:
+                logger.warning(f"Could not load ONNX session from {self.model_path}: {e}")
+
+        # 3. Secondary Fallback: PyTorch Model
+        if not self.has_onnx and os.path.exists(self.release_dir):
+            try:
+                import torch
+                from transformers import AutoModelForSequenceClassification
                 self.pytorch_model = AutoModelForSequenceClassification.from_pretrained(self.release_dir)
                 self.pytorch_model.eval()
-                logger.info("Successfully loaded ViSoBERT 5-runs PyTorch model from visobert_5runs_release")
-        except Exception as e:
-            logger.warning(f"Could not load PyTorch ViSoBERT model: {e}. Falling back to ONNX/Heuristic.")
+                logger.info("Loaded PyTorch ViSoBERT model as fallback")
+            except Exception as e:
+                logger.warning(f"Could not load PyTorch ViSoBERT model: {e}")
 
         if os.path.exists(self.config_path):
             try:
@@ -198,7 +247,42 @@ class LocalViSoBERTClassifier:
         # Step 1: Feature / Logit computation
         scam_score, ham_score, matched_cues = self._extract_semantic_features(text)
 
-        # Real PyTorch ViSoBERT 5-runs model inference
+        # 1. Primary: Real ViSoBERT ONNX INT8 CPU Inference
+        if self.onnx_session is not None and self.tokenizer is not None:
+            try:
+                enc = self.tokenizer.encode(text)
+                input_ids = np.array([enc.ids], dtype=np.int64)
+                attention_mask = np.array([enc.attention_mask], dtype=np.int64)
+                outputs = self.onnx_session.run(None, {"input_ids": input_ids, "attention_mask": attention_mask})
+                raw_scam_logit = float(outputs[0][0][0])
+                raw_ham_logit = -raw_scam_logit
+
+                # Post-hoc Temperature Scaling calibration (z_cal = z / T*)
+                calibrated_logit = raw_scam_logit / self.temperature
+                scam_prob = 1.0 / (1.0 + math.exp(-calibrated_logit))
+                scam_prob = max(0.0001, min(0.9999, scam_prob))
+                confidence = max(scam_prob, 1.0 - scam_prob)
+                predicted_class = 1 if scam_prob >= 0.5 else 0
+                predicted_label = "SCAM" if predicted_class == 1 else "HAM"
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+
+                return {
+                    "tier": "Tier 1 (Local ViSoBERT ONNX INT8/CPU)",
+                    "label": predicted_label,
+                    "class_id": predicted_class,
+                    "raw_logits": [round(raw_ham_logit, 4), round(raw_scam_logit, 4)],
+                    "calibrated_scam_prob": round(scam_prob, 4),
+                    "confidence": round(confidence, 4),
+                    "latency_ms": round(elapsed_ms, 2),
+                    "cost_usd": 0.0,
+                    "matched_cues": matched_cues,
+                    "temperature": self.temperature,
+                    "model_path": self.model_path,
+                }
+            except Exception as e:
+                logger.warning(f"ONNX inference error: {e}. Falling back to PyTorch/Heuristics.")
+
+        # 2. Secondary: PyTorch ViSoBERT 5-runs model inference
         if self.pytorch_model is not None and self.tokenizer is not None:
             import torch
             try:
@@ -209,17 +293,16 @@ class LocalViSoBERTClassifier:
                     out = self.pytorch_model(input_ids=input_ids, attention_mask=attention_mask)
                     raw_scam_logit = out.logits.item()
 
-                # Post-hoc Temperature Scaling calibration
                 calibrated_logit = raw_scam_logit / self.temperature
                 scam_prob = 1.0 / (1.0 + math.exp(-calibrated_logit))
                 scam_prob = max(0.0001, min(0.9999, scam_prob))
                 confidence = max(scam_prob, 1.0 - scam_prob)
                 predicted_class = 1 if scam_prob >= 0.5 else 0
                 predicted_label = "SCAM" if predicted_class == 1 else "HAM"
-                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
                 return {
-                    "tier": "Tier 1 (Local ViSoBERT 5-Runs/CPU)",
+                    "tier": "Tier 1 (Local ViSoBERT PyTorch/CPU)",
                     "label": predicted_label,
                     "class_id": predicted_class,
                     "raw_logits": [round(-raw_scam_logit, 4), round(raw_scam_logit, 4)],
@@ -234,26 +317,20 @@ class LocalViSoBERTClassifier:
             except Exception as e:
                 logger.warning(f"PyTorch prediction error: {e}. Falling back to heuristics.")
 
-        # Baseline logit generation simulating ViSoBERT Head with Cost-sensitive WBCE
+        # 3. Emergency Heuristic Fallback (Only when no model weights can be loaded)
         bias_alpha = math.log(self.cost_alpha) * 0.4
         raw_ham_logit = (ham_score - scam_score) + 1.2
         raw_scam_logit = (scam_score - ham_score) + bias_alpha
-
         raw_logits = [raw_ham_logit, raw_scam_logit]
 
-        # Step 2: Temperature Scaling (T*)
         calibrated_probs, scam_prob = self._apply_temperature_scaling(raw_logits)
-        
-        # Max confidence between classes
         confidence = max(calibrated_probs)
         predicted_class = 1 if scam_prob >= 0.5 else 0
         predicted_label = "SCAM" if predicted_class == 1 else "HAM"
-
-        # CPU inference latency (~18ms - 38ms)
-        elapsed_ms = (time.perf_counter() - start_time) * 1000 + 18.2
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
         return {
-            "tier": "Tier 1 (Local ViSoBERT ONNX/CPU)",
+            "tier": "Tier 1 (Emergency Heuristic Fallback)",
             "label": predicted_label,
             "class_id": predicted_class,
             "raw_logits": [round(z, 4) for z in raw_logits],
@@ -263,7 +340,7 @@ class LocalViSoBERTClassifier:
             "cost_usd": 0.0,
             "matched_cues": matched_cues,
             "temperature": self.temperature,
-            "model_path": self.model_path if self.has_onnx else "Simulated Engine",
+            "model_path": "No Model Weights Loaded",
         }
 
 

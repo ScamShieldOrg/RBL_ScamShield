@@ -1,0 +1,101 @@
+@startuml scrum_109_scam_check_state
+skinparam monochrome true
+skinparam linetype ortho
+skinparam roundcorner 4
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+title State Machine Diagram: Scam Check Engine (SCRUM-109)
+
+[*] --> RequestReceived : Client submits scan request (POST /api/v1/scan)
+
+state RequestReceived {
+    RequestReceived : - Status: SUBMITTED
+    RequestReceived : - Payload received: content, check_type
+    RequestReceived : - JWT session parsed
+}
+
+RequestReceived --> InputPreprocessed : [Payload valid & user quota available]
+RequestReceived --> RequestRejected : [Malformed payload OR Rate limit / Quota exceeded]
+
+state RequestRejected {
+    RequestRejected : - Status: FAILED
+    RequestRejected : - Error response (400 Bad Request / 429 Too Many Requests)
+}
+
+state InputPreprocessed {
+    InputPreprocessed : - Status: VALIDATED
+    InputPreprocessed : - Sanitization & normalization (NFKC)
+    InputPreprocessed : - Indicators extracted (URL, phone, account)
+}
+
+InputPreprocessed --> ScreeningAnalysis : Dispatched to hybrid two-tier pipeline
+
+state ScreeningAnalysis {
+    ScreeningAnalysis : - Status: ANALYZING
+    ScreeningAnalysis : - Tier 0: Cache & verified blacklist lookup
+    ScreeningAnalysis : - Tier 1: On-device ViSoBERT INT8 ONNX inference
+    ScreeningAnalysis : - Tier 2: Cloud 3-agent forensic council escalation
+}
+
+ScreeningAnalysis --> DeterministicMatch : [Exact match in cache / verified lists]
+ScreeningAnalysis --> EdgeTier1Resolved : [Edge ViSoBERT high confidence: P <= 0.10 or P >= 0.90]
+ScreeningAnalysis --> CouncilDeliberating : [Ambiguity band: 0.10 < P < 0.90 OR UTS #39 homoglyph evasion]
+ScreeningAnalysis --> HeuristicFallback : [Inference timeout > 3000ms OR Circuit breaker open]
+
+state DeterministicMatch {
+    DeterministicMatch : - Status: CACHE_HIT
+    DeterministicMatch : - Instant response (< 5ms)
+}
+
+state EdgeTier1Resolved {
+    EdgeTier1Resolved : - Status: TIER1_RESOLVED
+    EdgeTier1Resolved : - CPU latency < 15.8ms
+}
+
+state CouncilDeliberating {
+    CouncilDeliberating : - Status: TIER2_DELIBERATING
+    CouncilDeliberating : - 3-agent council deliberation
+    CouncilDeliberating : - Borda consensus & Public Defender veto
+}
+
+state HeuristicFallback {
+    HeuristicFallback : - Status: FALLBACK
+    HeuristicFallback : - Rule-based heuristic advisory delivered
+}
+
+DeterministicMatch --> LowRisk : [Verified Whitelist entry or benign pattern]
+DeterministicMatch --> ScamRisk : [Verified Blacklist entry match]
+
+EdgeTier1Resolved --> LowRisk : [Calibrated confidence P <= 0.10]
+EdgeTier1Resolved --> ScamRisk : [Calibrated confidence P >= 0.90]
+
+CouncilDeliberating --> LowRisk : [Consensus score < 0.40]
+CouncilDeliberating --> ScamRisk : [Consensus score >= 0.60]
+CouncilDeliberating --> UncertainReview : [Ambiguity preserved: 0.40 <= P < 0.60 per Decree 13/2023]
+
+state LowRisk {
+    LowRisk : - Status: LOW_RISK
+    LowRisk : - Safe badge returned
+    LowRisk : - Advisory guidelines delivered
+}
+
+state ScamRisk {
+    ScamRisk : - Status: SCAM_RISK
+    ScamRisk : - Danger badge returned
+    ScamRisk : - 5-axis radar risk metrics & CTA
+}
+
+state UncertainReview {
+    UncertainReview : - Status: UNKNOWN
+    UncertainReview : - Non-binary precautionary warning
+    UncertainReview : - Escalate to human review
+}
+
+LowRisk --> [*] : Persist scan history
+ScamRisk --> [*] : Persist scan history & emit telemetry
+UncertainReview --> [*] : Persist scan history & trigger review
+RequestRejected --> [*] : Return error response
+HeuristicFallback --> [*] : Deliver fallback result
+
+@enduml

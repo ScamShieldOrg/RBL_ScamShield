@@ -36,9 +36,10 @@ Tài liệu này là **Quy chuẩn Giao tiếp Kỹ thuật (Data Contract)** gi
   "data": {
     "scan_id": "SC-20261005-0012",
     "timestamp": "2026-10-05T08:30:00Z",
-    "tier_executed": 2, // 1: PhoBERT On-Device | 2: Cloud 5-Agent Council
+    "tier_executed": 2, // 1: ViSoBERT On-Device | 2: Cloud 3-Agent Council
     "verdict": {
-      "risk_level": "DANGEROUS", // "SAFE" | "SUSPICIOUS" | "DANGEROUS"
+      "risk_level": "CRITICAL", // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+      "final_label": "SCAM-RISK", // "SCAM-RISK" | "LOW-RISK" | "UNKNOWN"
       "risk_score": 96.5, // 0.0 -> 100.0
       "scam_category": "Mạo danh Cơ quan Nhà nước / Thuế (Phishing & Extortion)",
       "confidence": 0.98,
@@ -52,38 +53,31 @@ Tài liệu này là **Quy chuẩn Giao tiếp Kỹ thuật (Data Contract)** gi
       "data_harvesting": 90
     },
     "council_breakdown": {
-      "consensus_ratio": "5/5",
-      "lead_model": "DeepSeek-V3",
+      "architecture": "Consolidated 3-Agent Heterogeneous Council",
+      "consensus_ratio": "3/3",
+      "lead_model": "gpt-6.1-sol",
+      "early_exit_triggered": true,
       "agents": [
         {
-          "role": "Forensic Lead",
-          "verdict": "DANGEROUS",
-          "score": 98,
-          "finding": "Kịch bản khớp 100% với chiến dịch lừa nợ thuế tháng 9/2026."
+          "seat": "Seat A (cyber_financial_analyst)",
+          "role_id": "ROLE_CYBER_BANK",
+          "verdict": "SCAM-RISK",
+          "scam_prob": 0.98,
+          "finding": "Tên miền vneid-thuetphcm.com giả mạo cơ quan nhà nước, vi phạm quy chuẩn cổng dịch vụ công."
         },
         {
-          "role": "Psycholinguistic",
-          "verdict": "DANGEROUS",
-          "score": 95,
+          "seat": "Seat B (psycholinguistic_slang_profiler)",
+          "role_id": "ROLE_PSYCHO_TEENCODE",
+          "verdict": "SCAM-RISK",
+          "scam_prob": 0.95,
           "finding": "Cưỡng ép tâm lý hoảng sợ bằng kỳ hạn 24 giờ và dọa phong tỏa tài khoản."
         },
         {
-          "role": "Threat Intelligence",
-          "verdict": "DANGEROUS",
-          "score": 96,
-          "finding": "Tên miền vneid-thuetphcm.com đăng ký tại nước ngoài, không thuộc gov.vn."
-        },
-        {
-          "role": "Financial Specialist",
-          "verdict": "DANGEROUS",
-          "score": 94,
-          "finding": "Cơ quan thuế không bao giờ yêu cầu nộp phạt qua cổng web lạ."
-        },
-        {
-          "role": "Defense Validator",
-          "verdict": "DANGEROUS",
-          "score": 92,
-          "finding": "Không tìm thấy bất kỳ dấu hiệu tin nhắn chính thống nào."
+          "seat": "Seat C (public_defender_advocate)",
+          "role_id": "ROLE_DEFENDER",
+          "verdict": "SCAM-RISK",
+          "scam_prob": 0.92,
+          "finding": "Không tìm thấy căn cứ thông báo hành chính hợp pháp; đối chiếu quy chuẩn xác định nguy cơ lừa đảo cao."
         }
       ]
     },

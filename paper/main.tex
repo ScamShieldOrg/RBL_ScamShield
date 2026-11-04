@@ -345,7 +345,7 @@ Table~\ref{tab:ablation_council} assesses council configurations on the Hard For
 \midrule
 Arm 1: Full 5-Agent Council Specification & 5 & $94.87\%$ & $93.88\%$ & $\mathbf{100.00\%}$ & $76.00\%$ & $90.28\%$ & $\$0.7500$ & $5.00$ ($585$ total) \\
 Arm 2: Single-LLM Baseline ($\text{P-single}$) & 1 & $\mathbf{96.58\%}$ & $\mathbf{97.96\%}$ & $89.47\%$ & $89.47\%$ & $\mathbf{94.02\%}$ & $\mathbf{\$0.0450}$ & $\mathbf{1.00}$ ($117$ total) \\
-Arm 3: 3-Agent (No Defender, 2 seats) & 2 & $91.45\%$ & $89.80\%$ & $\mathbf{100.00\%}$ & $65.52\%$ & $84.84\%$ & $\$0.4500$ & $3.00$ ($351$ total) \\
+Arm 3: 2-Agent Panel (Seat C Omitted) & 2 & $91.45\%$ & $89.80\%$ & $\mathbf{100.00\%}$ & $65.52\%$ & $84.84\%$ & $\$0.3000$ & $2.00$ ($234$ total) \\
 Arm 4: Proposed 3-Agent Council (With Defender Veto) & 3 & $\mathbf{90.60\%}$ & $88.78\%$ & $\mathbf{100.00\%}$ & $\mathbf{76.00\%}$ & $86.58\%$ & $\$0.4500$ & $3.00$ ($351$ total) \\
 \bottomrule
 \end{tabular}%
@@ -358,7 +358,7 @@ Ablation reveals critical operational trade-offs:
 \begin{enumerate}
     \item \textbf{Single-LLM vs. Multi-Agent Council:} The Single-LLM baseline ($\text{P-single}$, Arm 2) achieved higher raw accuracy ($96.58\%$) and recall ($97.96\%$) at lower estimated cost ($\$0.0450/1\text{k}$). However, P-single recorded $2$ false alarms on authentic notices ($10.53\%$ FPR, $2/19$). In contrast, the proposed 3-agent council with Defender Veto (Arm 4) achieved $0.00\%$ false alarms ($0/19$, exact 95\% Clopper-Pearson CI: $[0.00\%, 17.65\%]$) by delegating 10 ambiguous edge cases to UNKNOWN abstention.
     \item \textbf{3-Agent vs. 5-Agent Council:} Exact two-sided binomial tests detected no statistically significant difference in paired classification correctness between the 3-agent and 5-agent configurations ($p = 0.0625$, Edwards' corrected $\chi^2 = 3.2000$). The 3-agent panel reduced API queries by $40.0\%$ ($585 \to 351$), saving $\$0.30/1\text{k}$ in estimated API fees while scam recall decreased by $5.10$ percentage points ($93.88\% \to 88.78\%$).
-    \item \textbf{Public Defender Impact:} Omitting Seat C (Arm 3) caused Ham precision to collapse to $65.52\%$, whereas integrating Seat C with $\delta_{\text{defender}} = 0.25$ (Arm 4) restored Ham precision to $76.00\%$ ($94.74\%$ selective precision). We note that Arm 3 reduces the council size from three agents to two seats rather than substituting a generic control agent, introducing an empirical confounder.
+    \item \textbf{Public Defender Impact:} Omitting Seat C in Arm 3 (2-agent panel, 234 total calls, \$0.3000/1k) caused Ham precision to collapse to $65.52\%$, whereas integrating Seat C with $\delta_{\text{defender}} = 0.25$ in the 3-agent council (Arm 4) restored Ham precision to $76.00\%$ ($94.74\%$ selective precision). We note that Arm 3 measures the combined effect of omitting the Public Defender persona and downsizing the panel from three agents to two seats.
 \end{enumerate}
 
 Complete $2 \times 3$ confusion matrices across all four experimental arms are cataloged in Supplementary Table~S3.

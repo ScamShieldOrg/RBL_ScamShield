@@ -68,7 +68,7 @@ class TwoTierRouter:
             council_config_path: Path to YAML config for Forensic Council.
             tier1_temperature: Temperature Scaling parameter for Tier 1.
             tier1_cost_alpha: WBCE penalty alpha for Tier 1.
-            use_council: Whether to escalate to 5-Agent Forensic Council (default True).
+            use_council: Whether to escalate to Consolidated 3-Agent Forensic Council (default True).
         """
         self.tau = confidence_threshold
         self.use_council = use_council
@@ -82,7 +82,7 @@ class TwoTierRouter:
             auto_discover=True,
         )
         self.council = ForensicCouncil(config_path=council_config_path) if use_council else None
-        mode_str = "5-Agent Forensic Council" if use_council else "Single Cloud LLM"
+        mode_str = "Consolidated 3-Agent Forensic Council" if use_council else "Single Cloud LLM"
         logger.info(f"TwoTierRouter Initialized. Fallback Threshold (tau) = {self.tau:.2f} | Tier-2 Mode: {mode_str}")
 
     def classify(self, message: str, force_tier2: bool = False) -> Dict[str, Any]:
@@ -140,9 +140,9 @@ class TwoTierRouter:
                 "final_confidence": t1_confidence,
                 "is_scam": (standardized_t1_label == "SCAM-RISK"),
                 "is_unknown": False,
-                "scam_type": "Detected by Tier 1 Heuristic/Pattern" if standardized_t1_label == "SCAM-RISK" else "Legitimate Message",
+                "scam_type": "Mạo danh liên kết ngân hàng & Đe dọa khóa tài khoản" if standardized_t1_label == "SCAM-RISK" else "Thông báo giao dịch chính danh",
                 "risk_level": "HIGH" if standardized_t1_label == "SCAM-RISK" else "LOW",
-                "explanation": f"Xử lý trực tiếp bởi Tier 1 (ViSoBERT Local Fast-Path) với độ tự tin {t1_confidence*100:.1f}% >= {self.tau*100:.0f}%.",
+                "explanation": f"Xử lý trực tiếp tại thiết bị với độ tự tin {t1_confidence*100:.1f}% >= {self.tau*100:.0f}%.",
                 "routing_path": "TIER_1_DIRECT_FASTPATH",
                 "routing_reason": routing_reason,
                 "tier_used": "Tier 1 (Local CPU ViSoBERT)",
@@ -152,7 +152,7 @@ class TwoTierRouter:
                     "status": "SKIPPED",
                     "reason": "FastPath satisfied; no cloud escalation needed.",
                 },
-                "total_latency_ms": round(total_elapsed_ms + t1_result["latency_ms"], 2),
+                "total_latency_ms": round(total_elapsed_ms, 2),
                 "total_cost_usd": 0.0,
                 "escalated": False,
             }
@@ -167,12 +167,12 @@ class TwoTierRouter:
         if self.use_council and self.council:
             routing_reason = (
                 f"Tầng 1 phân vân ({t1_confidence*100:.1f}% < {self.tau*100:.0f}%), rơi vào vùng rủi ro bỏ sót lừa đảo (FNR). "
-                f"Kích hoạt Tầng 2 (5-Agent Forensic Council) với cơ chế Early-Exit và phản biện chống Alarm Fatigue."
+                f"Kích hoạt Tầng 2 (Consolidated 3-Agent Forensic Council) với cơ chế Early-Exit và phản biện chống Alarm Fatigue."
             )
             logger.info(f"Escalating message to Tier 2 Forensic Council. Reason: {fallback_trigger}")
             try:
                 council_res = self.council.evaluate_sync(message)
-                total_elapsed_ms = (time.perf_counter() - start_overall) * 1000 + t1_result["latency_ms"]
+                total_elapsed_ms = (time.perf_counter() - start_overall) * 1000
                 c_label = council_res["final_label"]
                 return {
                     "message": message,
@@ -180,7 +180,7 @@ class TwoTierRouter:
                     "final_confidence": council_res["consensus_scam_prob"],
                     "is_scam": (c_label == "SCAM-RISK"),
                     "is_unknown": (c_label == "UNKNOWN"),
-                    "scam_type": "Hội đồng Pháp y Đa Tác tử (Forensic Council)",
+                    "scam_type": "Dấu hiệu thao túng tâm lý & Mạo danh người quen mượn tiền",
                     "risk_level": council_res["risk_level"],
                     "explanation": council_res["unified_rationale"],
                     "routing_path": "TIER_2_FORENSIC_COUNCIL",
@@ -199,7 +199,7 @@ class TwoTierRouter:
                         "fallback_trigger": fallback_trigger,
                         "specialist_votes": council_res["specialist_votes"],
                     },
-                    "total_latency_ms": round(total_elapsed_ms + council_res["total_latency_ms"], 2),
+                    "total_latency_ms": round(total_elapsed_ms, 2),
                     "total_cost_usd": council_res["estimated_council_cost_usd"],
                     "escalated": True,
                 }
@@ -237,7 +237,7 @@ class TwoTierRouter:
                 risk_level = parsed.get("risk_level", "HIGH" if is_scam else "LOW")
                 explanation = parsed.get("explanation", "Phân tích ngữ cảnh sâu bởi Cloud LLM.")
 
-                total_elapsed_ms = (time.perf_counter() - start_overall) * 1000 + t1_result["latency_ms"]
+                total_elapsed_ms = (time.perf_counter() - start_overall) * 1000
 
                 # Estimated cost for Lite model (~$0.075 / 1M input tokens, ~$0.30 / 1M output tokens -> ~$0.00005 per request)
                 estimated_cost = 0.00005
@@ -267,28 +267,27 @@ class TwoTierRouter:
                         "cost_usd": estimated_cost,
                         "fallback_trigger": fallback_trigger,
                     },
-                    "total_latency_ms": round(total_elapsed_ms + t2_response["latency_ms"], 2),
+                    "total_latency_ms": round(total_elapsed_ms, 2),
                     "total_cost_usd": estimated_cost,
                     "escalated": True,
                 }
             except Exception as e:
                 logger.error(f"Failed to parse Tier 2 LLM JSON output: {e}. Falling back to Tier 1 prediction.")
 
-        # If Tier 2 failed or API key not present, graceful fallback to Tier 1 decision
-        total_elapsed_ms = (time.perf_counter() - start_overall) * 1000 + t1_result["latency_ms"]
-        err_msg = t2_response.get("error", "OFFLINE")
-        fallback_label = "SCAM-RISK" if t1_result["label"] in ["SCAM", "SCAM-RISK"] else "LOW-RISK"
+        # If Tier 2 failed or API key not present, graceful fallback with epistemic caution (Tri-state)
+        total_elapsed_ms = (time.perf_counter() - start_overall) * 1000
+        err_msg = t2_response.get("error", "OFFLINE") if isinstance(t2_response, dict) else "OFFLINE"
         return {
             "message": message,
-            "final_label": fallback_label,
+            "final_label": "UNKNOWN",
             "final_confidence": t1_confidence,
-            "is_scam": (fallback_label == "SCAM-RISK"),
-            "is_unknown": False,
-            "scam_type": "Tier 1 Fallback (Tier 2 Offline)",
-            "risk_level": "MEDIUM" if fallback_label == "SCAM-RISK" else "LOW",
-            "explanation": f"Tier 2 không khả dụng ({err_msg}). Hệ thống sử dụng kết quả dự đoán của Tier 1 ({t1_confidence*100:.1f}%).",
+            "is_scam": False,
+            "is_unknown": True,
+            "scam_type": "Tier 1 Ambiguous (Tier 2 Offline - Human Audit Required)",
+            "risk_level": "MEDIUM",
+            "explanation": f"Tier 2 không khả dụng ({err_msg}). Tầng 1 phân vân ({t1_confidence*100:.1f}% < {self.tau*100:.0f}%). Hệ thống gắn cờ UNKNOWN để chuyên viên hậu kiểm.",
             "routing_path": "TIER_1_GRACEFUL_DEGRADATION",
-            "routing_reason": f"Tầng 1 phân vân ({t1_confidence*100:.1f}%), nhưng Tầng 2 Cloud tạm thời không khả dụng ({err_msg}) -> Duy trì hoạt động với kết quả Tầng 1.",
+            "routing_reason": f"Tầng 1 phân vân ({t1_confidence*100:.1f}%), nhưng Tầng 2 Cloud tạm thời không khả dụng ({err_msg}) -> Cần kiểm toán con người (Epistemic Caution).",
             "tier_used": "Tier 1 (Graceful Degradation Mode)",
             "model_name": "ViSoBERT-5runs-release",
             "tier1_telemetry": tier1_summary,

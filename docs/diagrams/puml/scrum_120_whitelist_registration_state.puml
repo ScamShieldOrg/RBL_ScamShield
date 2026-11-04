@@ -1,0 +1,77 @@
+@startuml scrum_120_whitelist_registration_state
+skinparam monochrome true
+skinparam linetype ortho
+skinparam roundcorner 4
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+title State Machine Diagram: Business/Bank Whitelist Registration (SCRUM-120)
+
+[*] --> SubmissionPendingReview : Partner submits whitelist application with legal/telecom proof
+
+state SubmissionPendingReview {
+    SubmissionPendingReview : - Status: PENDING
+    SubmissionPendingReview : - Stored in whitelist_entries
+    SubmissionPendingReview : - Domain/hotline assets parsed
+}
+
+SubmissionPendingReview --> UnderReview : Compliance officer assigned to review
+
+state UnderReview {
+    UnderReview : - Verify business legal credentials
+    UnderReview : - Perform DNS TXT challenge for domains
+    UnderReview : - Perform telephony verification for hotlines
+}
+
+UnderReview --> Rejected : [Failed legal check or fraudulent claims] Reject application
+UnderReview --> VerifiedAsset : [All legal & technical proofs verified] Verify asset
+UnderReview --> NeedsRevision : [Documents incomplete or ambiguous]
+
+state Rejected {
+    Rejected : - Status: REJECTED
+    Rejected : - Audit log recorded with rejection reasons
+    Rejected : - Formal notification sent to applicant
+}
+
+state NeedsRevision {
+    NeedsRevision : - Status: NEEDS_REVISION
+    NeedsRevision : - Revision request sent to partner
+    NeedsRevision : - 7-day grace period countdown
+}
+
+NeedsRevision --> UnderReview : [Partner uploads supplementary documents]
+NeedsRevision --> Rejected : [Grace period expired without response]
+
+state VerifiedAsset {
+    VerifiedAsset : - Status: VERIFIED
+    VerifiedAsset : - Technical authentication confirmed
+}
+
+VerifiedAsset --> ActiveWhitelist : [Approved by administrator]
+VerifiedAsset --> EscalatedConflict : [Conflict with active blacklist indicator]
+
+state ActiveWhitelist {
+    ActiveWhitelist : - Status: APPROVED_ACTIVE
+    ActiveWhitelist : - Flagged auto_lock_moderation = true
+    ActiveWhitelist : - Domains & hotlines published to Authenticated Whitelist
+}
+
+state EscalatedConflict {
+    EscalatedConflict : - Status: ESCALATED_CONFLICT
+    EscalatedConflict : - Auto-locked for administrator dispute adjudication
+}
+
+ActiveWhitelist --> Revoked : [Domain hijacked, SIM swap, or business closure]
+
+state Revoked {
+    Revoked : - Status: REVOKED
+    Revoked : - Removed from active whitelist
+    Revoked : - Security telemetry broadcasted
+}
+
+Rejected --> [*]
+ActiveWhitelist --> [*]
+Revoked --> [*]
+EscalatedConflict --> [*]
+
+@enduml

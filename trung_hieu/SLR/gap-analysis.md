@@ -88,7 +88,7 @@ Hiện nay, chưa có nghiên cứu nào thiết kế và đánh giá thực ngh
     *   *Hiệu năng triển khai:* P95/P99 Inference Latency (ms), CPU/Memory Footprint (MB), và Cost per 1,000 queries ($).
 *   **LLM / Tool đề xuất:** 
     *   *Tầng 1 (Local CPU):* `PhoBERT-base` (hoặc `BiGRU+MaskedPool`) fine-tuned với hàm mất mát **WBCE** (phạt nặng lỗi bỏ lọt lừa đảo).
-    *   *Tầng 2 (Cloud Fallback - Hội đồng Pháp y Đa Tác tử):* Nâng cấp từ Single LLM lên 5-Agent Forensic Council (kế thừa `M043` MultiPhishGuard, `M044` PoLL, `M045` NAACL 2025 Council) với cơ chế Early-Exit Fast-Path (<1.2s) và vai trò Public Defender dập tắt Alarm Fatigue khi Confidence Score của Tầng 1 $< 90\%$.
+    *   *Tầng 2 (Cloud Fallback - Hội đồng Pháp y Đa Tác tử):* Nâng cấp từ Single LLM lên Consolidated 3-Agent Forensic Council (tinh giản từ 5 tác tử theo Occam's Razor) (kế thừa `M043` MultiPhishGuard, `M044` PoLL, `M045` NAACL 2025 Council) với cơ chế Early-Exit Fast-Path (<1.2s) và vai trò Public Defender dập tắt Alarm Fatigue khi Confidence Score của Tầng 1 $< 90\%$.
 *   **Baseline đề xuất:** So sánh trực tiếp với:
     1.  *Mô hình đơn tầng truyền thống:* SVM + TF-IDF, Logistic Regression từ `M023`.
     2.  *Mô hình Deep Learning đơn lẻ:* Standalone DistilBERT và MacBERT-BiLSTM từ `M041`, `M042`.

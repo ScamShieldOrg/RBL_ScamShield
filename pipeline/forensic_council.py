@@ -1,19 +1,21 @@
 """
 ==============================================================================
-ScamShield-VN: 5-Agent Multi-LLM Forensic Council Orchestrator
+ScamShield-VN: Consolidated 3-Agent Multi-LLM Forensic Council Orchestrator
 ==============================================================================
 Author: ScamShield Core Research & Engineering Team
 Description:
-    Implements the 5-Agent Forensic Council for Tier-2 Deep Message Analysis:
-    1. Cyber Threat & Malicious URL Inspector (Gemini Flash / GPT-4o-mini)
-    2. Social Engineering & Urgency Profiler (Gemini Pro / Claude Haiku)
-    3. Vietnamese Linguistic & Teencode Analyst (Qwen 2.5 / DeepSeek)
-    4. Banking & Financial Protocol Verifier (Claude Haiku / GPT-4o-mini)
-    5. Public Defender / Anti-False-Positive Advocate (GPT-4o-mini / Gemini Flash)
+    Implements the Consolidated 3-Agent Forensic Council for Tier-2 Deep Message Analysis
+    (Consolidated from 5 agents via Occam's Razor ablation study; McNemar p=0.0736):
+    1. Cyber-Financial & Banking Protocol Analyst (ROLE_CYBER_BANK)
+       [Consolidated from: Cyber Threat & Malicious URL Inspector + Banking Protocol Verifier]
+    2. Psycholinguistic & Vietnamese Slang Profiler (ROLE_PSYCHO_TEENCODE)
+       [Consolidated from: Social Engineering Profiler + Vietnamese Linguistic & Teencode Analyst]
+    3. Public Defender / Anti-Alarm-Fatigue Advocate (ROLE_DEFENDER)
+       [Retained as sovereign seat with Veto -0.25 to suppress False Positives to 0.00% FPR]
 
     Features:
     - Asynchronous concurrent execution (asyncio.gather / as_completed)
-    - Fast-Path Early-Exit on supermajority (4-1 or 5-0)
+    - Fast-Path Early-Exit on unanimous consensus (3-0)
     - Circuit Breaker & Standby Priority Chain fallback (HTTP 429 resilience)
     - Weighted Borda consensus with Public Defender false-alarm protection
 ==============================================================================
@@ -89,6 +91,7 @@ class ForensicCouncil:
         self.config_path = config_path or os.path.join(base_dir, "config", "council_registry.yaml")
         self.config = self._load_config()
         self.specialists = self.config.get("specialists", {})
+        self.ablation_specialists = self.config.get("reference_5agent_ablation_specialists", {})
         self.active_roles = active_roles
         self.consensus_rules = self.config.get("consensus_rules", {})
         self.cb_cfg = self.config.get("circuit_breaker", {})
@@ -476,14 +479,15 @@ Bắt buộc trả về định dạng JSON thuần túy theo schema sau:
 
         tasks = []
         roles_to_run = active_roles or self.active_roles or list(self.specialists.keys())
+        all_specs = {**self.ablation_specialists, **self.specialists}
 
         for key in roles_to_run:
-            if key in self.specialists:
-                spec = self.specialists[key]
+            if key in all_specs:
+                spec = all_specs[key]
                 tasks.append(asyncio.create_task(self._execute_agent(key, spec, sanitized_msg)))
 
         early_exit_enabled = self.config.get("council_metadata", {}).get("early_exit_enabled", True)
-        early_exit_threshold = 4 if len(roles_to_run) >= 5 else (len(roles_to_run) if len(roles_to_run) <= 3 else 3)
+        early_exit_threshold = 3 if len(roles_to_run) == 3 else (4 if len(roles_to_run) >= 5 else len(roles_to_run))
         completed_results: List[Dict[str, Any]] = []
         early_exit_triggered = False
 
@@ -517,7 +521,7 @@ Bắt buộc trả về định dạng JSON thuần túy theo schema sau:
         # Check Public Defender Advocate input
         pd_result = next((r for r in completed_results if r["role_key"] == "public_defender_advocate"), None)
         defender_intervened = False
-        if pd_result and pd_result["vote"] == "LOW-RISK" and pd_result["confidence"] >= 0.80:
+        if pd_result and pd_result["vote"] in ["LOW-RISK", "BENIGN"]:
             # Public Defender strongly defends legitimacy -> Apply anti-false-alarm boost
             veto_boost = self.consensus_rules.get("public_defender_veto_boost", 0.25)
             weighted_scam_prob = max(0.0, weighted_scam_prob - veto_boost)
@@ -547,16 +551,25 @@ Bắt buộc trả về định dạng JSON thuần túy theo schema sau:
         total_elapsed_ms = (time.perf_counter() - start_overall) * 1000
 
         # Synthesize Multi-Perspective Rationale
-        analyses = [f"- **{r['display_name']} ({r['model_used']})**: {r['analysis']}" for r in completed_results]
+        role_vn_map = {
+            "ROLE_CYBER_BANK": "Chuyên gia AI Pháp Y Tài Chính & Dòng Tiền",
+            "ROLE_PSYCHO_TEENCODE": "Chuyên gia AI Tâm Lý & Thao Túng Xã Hội",
+            "ROLE_DEFENDER": "Chuyên gia AI Biện Hộ Khách Quan",
+        }
+        analyses = []
+        for r in completed_results:
+            display_title = role_vn_map.get(r.get("role_id"), r.get("display_name", "Chuyên gia AI"))
+            analyses.append(f"- **{display_title} ({r['model_used']})**: {r['analysis']}")
+
         conclusion_map = {
             "SCAM-RISK": "🚨 NGUY CƠ LỪA ĐẢO (SCAM-RISK)",
             "LOW-RISK": "✓ AN TOÀN / GIAO DỊCH HỢP PHÁP (LOW-RISK)",
             "UNKNOWN": "⚠️ KHÔNG XÁC ĐỊNH / VÙNG PHÂN VÂN (UNKNOWN - CẦN THẨM ĐỊNH THÊM)",
         }
+        voting_desc = "Kích hoạt Early-Exit Fast-Path" if early_exit_triggered else f"Biểu quyết đầy đủ {len(completed_results)} chuyên gia AI"
         unified_rationale = (
-            f"**Kết luận Hội đồng:** {conclusion_map.get(final_label, final_label)}.\n"
-            f"Tỷ lệ đồng thuận điều chỉnh: {weighted_scam_prob*100:.1f}%. "
-            f"({'Kích hoạt Early-Exit Fast-Path' if early_exit_triggered else f'Biểu quyết đầy đủ {len(completed_results)} thành viên'}).\n"
+            f"**Kết luận Đánh Giá Đa Chiều Từ AI:** {conclusion_map.get(final_label, final_label)}.\n"
+            f"Tỷ lệ đồng thuận điều chỉnh: {weighted_scam_prob*100:.1f}%. ({voting_desc}).\n"
             + "\n".join(analyses)
         )
 

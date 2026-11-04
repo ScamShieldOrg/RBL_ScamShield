@@ -45,9 +45,12 @@ Màn hình cốt lõi nhất của ứng dụng, nơi người dùng đã đăng
    * Tóm tắt nguyên nhân bằng tiếng Việt dễ hiểu cho người lớn tuổi.
 6. **Biểu đồ Radar 5 Trục (Radar Risk Chart):**
    * Trực quan hóa 5 yếu tố: Ép buộc thời gian, Mạo danh cơ quan, Bẫy tài chính, Kênh nghi vấn, Ý đồ thu thập dữ liệu.
-7. **Chi tiết Hội đồng 5 AI (Council Breakdown Accordion):**
-   * Tỷ lệ đồng thuận (ví dụ: `5/5 ĐỒNG THUẬN`).
-   * Danh sách quan điểm rút gọn của 5 chuyên gia (Forensic, Tâm lý học, Tình báo mạng, Tài chính, Phản biện).
+7. **Chi tiết Hội đồng 3 AI Hợp Nhất (Council Breakdown Accordion):**
+   * Tỷ lệ đồng thuận (ví dụ: `3/3 ĐỒNG THUẬN` hoặc `2/1 PHÂN VÂN -> UNKNOWN`).
+   * Danh sách quan điểm rút gọn của 3 chuyên gia:
+     1. Chuyên gia An ninh Mạng & Quy trình Ngân hàng (cyber_financial_analyst)
+     2. Chuyên gia Tâm lý Tội phạm & Biến thể Ngôn ngữ (psycholinguistic_slang_profiler)
+     3. Luật sư Bào chữa Công cộng chống báo động giả (public_defender_advocate)
 8. **Hành động tiếp theo (Actions):**
    * Nút *"Báo cáo ngay vào Blacklist"* (chuyển tiếp sang màn hình SCRUM-14 kèm nội dung điền sẵn).
    * Nút *"Lưu vào Lịch sử"* hoặc *"Chia sẻ cảnh báo cho người thân"*.

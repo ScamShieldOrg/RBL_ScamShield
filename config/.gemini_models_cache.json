@@ -1,5 +1,5 @@
 {
-  "timestamp": 1789626920.1509175,
+  "timestamp": 1793789357.9221916,
   "tiers": {
     "lite": [
       "gemini-3.5-flash-lite",
@@ -10,6 +10,7 @@
       "gemini-flash-lite-latest"
     ],
     "standard": [
+      "gemini-4-argon",
       "gemini-3.8-flash",
       "gemini-3.7-flash",
       "gemini-3.6-flash",
@@ -21,6 +22,7 @@
       "gemini-2.5-flash-image",
       "gemini-2.5-flash",
       "gemini-2.5-computer-use-preview-10-2025",
+      "gemini-nano-banana-2.1",
       "gemini-omni-1.1-flash",
       "gemini-flash-latest",
       "gemini-omni-flash-preview"

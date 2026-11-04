@@ -1,0 +1,69 @@
+@startuml scrum_108_dispute_appeal_state
+skinparam monochrome true
+skinparam linetype ortho
+skinparam roundcorner 4
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+title State Machine Diagram: Dispute & Appeal Management (SCRUM-108)
+
+[*] --> DisputePendingReview : Contested indicator & ownership proof submitted
+
+state DisputePendingReview {
+    DisputePendingReview : - Status: PENDING
+    DisputePendingReview : - Stored in disputes table
+    DisputePendingReview : - SLA timer initialized (48h target)
+}
+
+DisputePendingReview --> UnderReview : Dispute compliance officer assigned
+
+state UnderReview {
+    UnderReview : - Verify legal ownership documentation
+    UnderReview : - Audit historical abuse & complaint logs
+    UnderReview : - Evaluate mitigating counter-evidence
+}
+
+UnderReview --> DisputeRejected : [Counter-evidence invalid or malice persists] Reject appeal
+UnderReview --> VerifiedAppeal : [Ownership authenticity and benign status confirmed] Verify claim
+UnderReview --> NeedsMoreInfo : [Documentation deficient / illegible proof uploaded]
+
+state DisputeRejected {
+    DisputeRejected : - Status: REJECTED
+    DisputeRejected : - Indicator retained on ScamShield Blacklist
+    DisputeRejected : - Audit log recorded with mandatory rejection rationale
+}
+
+state NeedsMoreInfo {
+    NeedsMoreInfo : - Status: NEEDS_MORE_INFO
+    NeedsMoreInfo : - Clarification request sent via email / in-app
+    NeedsMoreInfo : - 7-day grace period countdown
+}
+
+NeedsMoreInfo --> UnderReview : [Supplementary proof uploaded within 7 days]
+NeedsMoreInfo --> DisputeRejected : [Grace period expired without response]
+
+state VerifiedAppeal {
+    VerifiedAppeal : - Status: VERIFIED
+    VerifiedAppeal : - Retraction justification endorsed
+}
+
+VerifiedAppeal --> DisputeUpheld : [Retraction decision approved by officer]
+
+state DisputeUpheld {
+    DisputeUpheld : - Status: APPROVED
+    DisputeUpheld : - Case marked as resolved
+}
+
+DisputeUpheld --> IndicatorRetracted : [Execute delisting from active blacklist]
+
+state IndicatorRetracted {
+    IndicatorRetracted : - Status: RETRACTED_WHITELISTED
+    IndicatorRetracted : - Indicator removed from active ScamShield Blacklist
+    IndicatorRetracted : - Public restitution clearance badge updated
+    IndicatorRetracted : - Resolution notification dispatched to appellant
+}
+
+DisputeRejected --> [*]
+IndicatorRetracted --> [*]
+
+@enduml

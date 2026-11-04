@@ -39,7 +39,7 @@
 # Cần thêm vào experiments/tier2_council/analyze_consensus.py:
 def compute_error_correlation_matrix(all_council_runs):
     """
-    Tính toán ma trận tương quan lỗi giữa 5 chuyên gia.
+    Tính toán ma trận tương quan lỗi giữa 3 chuyên gia (hoặc giữa 5 chuyên gia trong kiểm định ablation đối sánh).
     Nếu correlation_error > 0.6, cảnh báo: Council bị bias chung (Common Mode Failure)
     """
 ```

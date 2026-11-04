@@ -51,6 +51,6 @@ tier_routing:
 
 # Cold-start bootstrap fallback aliases (used only if initial discovery fails with no cache)
 bootstrap_fallbacks:
-  lite: "gemini-2.5-flash-lite"
-  standard: "gemini-2.5-flash"
-  pro: "gemini-2.5-pro"
+  lite: "gemini-3.5-flash-lite"
+  standard: "gemini-3.5-flash"
+  pro: "gemini-3.8-flash"

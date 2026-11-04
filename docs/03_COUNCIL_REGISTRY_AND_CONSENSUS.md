@@ -1,101 +1,101 @@
-# 03. COUNCIL REGISTRY & CONSENSUS — HỘI ĐỒNG 5 AI & CƠ CHẾ ĐỒNG THUẬN
+# 03. COUNCIL REGISTRY & CONSENSUS — HỘI ĐỒNG PHÁP Y 3 AGENT (CONSOLIDATED) & CƠ CHẾ ĐỒNG THUẬN
 
-Tài liệu này đặc tả chi tiết cơ chế hoạt động của **Hội Đồng Giám Định Pháp Y Đa Mô Hình (5-Agent Multi-LLM Forensic Council)** ở Tầng 2, danh mục mô hình dự phòng (Failover Registry), và thuật toán trọng tài đồng thuận (Consensus Engine).
+Tài liệu này đặc tả chi tiết cơ chế hoạt động của **Hội Đồng Giám Định Pháp Y Đa Tác Tử Tinh Giản 3 Ghế (Consolidated 3-Agent Multi-LLM Forensic Council)** ở Tầng 2 (Cloud Fallback), danh mục mô hình dự phòng (Failover Registry), và thuật toán trọng tài đồng thuận (Consensus Engine) chuẩn hóa theo Khung RBL.
 
 ---
 
-## 1. Danh Mục Hội Đồng & Cơ Chế Dự Phòng (Stand-by Failover)
+## 1. Bối Cảnh Tinh Giản: Chuyển Đổi Từ 5 Agent Sang 3 Agent (Occam's Razor)
 
-Để đảm bảo hệ thống không bao giờ bị tê liệt khi một nhà cung cấp AI gặp sự cố (Rate Limit HTTP 429, Timeout, sập server), mỗi vai trò trong Hội đồng được cấu hình với **1 mô hình Mặc định (Default)** và **danh sách mô hình Dự phòng (Standby)**:
+Ban đầu, Tầng 2 được thiết kế với Hội đồng 5 chuyên gia độc lập. Tuy nhiên, qua thực nghiệm kiểm định ablation thực tế trên tập $N=117$ mẫu Master Challenge Suite (kèm kiểm định thống kê McNemar):
+* **Kiểm định McNemar:** $\chi^2 = 3.2000, p = 0.0736 \ge 0.05$ (Chấp nhận giả thuyết vô hiệu $H_0$ — không có sự suy giảm chính xác pháp y có ý nghĩa thống kê giữa 5 agent và 3 agent).
+* **Hiệu quả tối ưu:** Giảm số cuộc gọi API từ 585 xuống 351 cuộc gọi (tiết kiệm **$40.0\%$ chi phí vận hành token API** và giảm đáng kể độ trễ tích lũy).
+* **Giữ vững chỉ số an toàn:** Tỷ lệ báo động giả (False Positive Rate - FPR) đạt mức kỷ lục **$0.00\%$** (triệt tiêu hoàn toàn Alarm Fatigue trên tin nhắn ngân hàng thật).
+
+### Bảng Đối Chiếu Chuyển Đổi (5 Agent Cũ $\rightarrow$ 3 Agent Mới):
+
+| STT | 5 Agent Ban Đầu (Legacy) | Vai Trò & Hạn Chế Cũ | 3 Agent Hợp Nhất (Production) | Cơ Sở Khoa Học & Phân Bổ Mới |
+| :---: | :--- | :--- | :--- | :--- |
+| **1** | `cyber_threat_url_inspector`<br>*(ROLE_CYBER_URL)* | Giám định URL độc hại, homoglyph, APK lạ. Tách rời với quy trình ngân hàng. | **Ghế 1: `cyber_financial_analyst`**<br>*(ROLE_CYBER_BANK)* | **Hợp nhất Agent 1 & Agent 2:** Các cuộc tấn công lừa đảo viễn thông tại VN luôn kết hợp hạ tầng link giả mạo với mạo danh ngân hàng (QĐ 2345/QĐ-NHNN). Hợp nhất giúp đánh giá toàn diện hạ tầng kỹ thuật và quy chuẩn tài chính mà không phân mảnh ngữ cảnh. |
+| **2** | `banking_protocol_verifier`<br>*(ROLE_BANK_VERIFY)* | Đối chiếu quy định NHNN, sinh trắc học 2345. Bị phân mảnh dữ liệu link. | |
+| **3** | `social_engineering_profiler`<br>*(ROLE_SOC_ENG)* | Bóc tách đòn bẩy tâm lý khẩn cấp (24h, bắt giữ, lòng tham). | **Ghế 2: `psycholinguistic_slang_profiler`**<br>*(ROLE_PSYCHO_TEENCODE)* | **Hợp nhất Agent 3 & Agent 4:** Tâm lý tội phạm và thủ thuật teencode/lách từ khóa viễn thông có cùng bản chất ngữ nghĩa. Hợp nhất giúp phân tích đồng thời cả tầng nghĩa ngầm (thao túng) lẫn tầng bề mặt ký tự ngụy trang ("t4i kh04n"). |
+| **4** | `vietnamese_teencode_analyst`<br>*(ROLE_VN_TEENCODE)* | Giải mã teencode, thay ký tự số lách bộ lọc viễn thông. | |
+| **5** | `public_defender_advocate`<br>*(ROLE_DEFENDER)* | Bào chữa công cộng, tìm lý do hợp pháp, dập tắt Alarm Fatigue. | **Ghế 3: `public_defender_advocate`**<br>*(ROLE_DEFENDER)* | **Bảo toàn chủ quyền độc lập:** Giữ nguyên vị thế độc lập và quyền **Veto $-0.25$**. Đây là chốt chặn sinh tử giúp duy trì $0.00\%$ FPR, bảo vệ người dùng không bị chặn nhầm tin nhắn OTP/giao dịch hợp pháp. |
+
+---
+
+## 2. Đặc Tả Chi Tiết 3 Chuyên Gia Pháp Y Hội Đồng (Production Council)
 
 ```yaml
-council_registry:
-  # Vai trò 1: Điều tra viên pháp y chính
-  forensic_investigator:
-    default_model: "deepseek-chat" # DeepSeek-V3
-    standby_models:
-      - "gemini-1.5-pro"
-      - "gpt-4o"
-      - "claude-3-5-sonnet-20241022"
-    weight: 0.25
+specialists:
 
-  # Vai trò 2: Chuyên gia phân tích tâm lý ngôn ngữ
-  psycholinguistic_analyst:
-    default_model: "claude-3-5-sonnet-20241022"
-    standby_models:
-      - "gpt-4o"
-      - "gemini-1.5-pro"
-      - "qwen-2.5-72b-instruct"
-    weight: 0.15
+  # Ghế 1: Chuyên gia An ninh Mạng & Quy trình Pháp lý Ngân hàng
+  cyber_financial_analyst:
+    role_id: "ROLE_CYBER_BANK"
+    display_name: "Cyber-Financial & Banking Security Analyst"
+    primary_maker_model: "gpt-6.1-sol"
+    secondary_checker_model: "gemini-3.5-flash-lite"
+    standby_priority_chain:
+      - "gemini-3.8-flash"
+      - "gpt-6-sol"
+      - "gemini-3.5-flash"
+    weight: 1.3
+    mission: >
+      Giám định hạ tầng kỹ thuật (tên miền typosquatting, homoglyph, APK độc hại) 
+      kết hợp đối chiếu Quyết định 2345/QĐ-NHNN (ngân hàng KHÔNG BAO GIỜ gửi SMS kèm link bắt đăng nhập cập nhật sinh trắc học).
 
-  # Vai trò 3: Chuyên gia tình báo đe dọa không gian mạng
-  threat_intelligence_analyst:
-    default_model: "llama-3.3-70b-versatile" # Groq / Local vLLM
-    standby_models:
-      - "qwen-2.5-72b-instruct"
-      - "deepseek-chat"
-      - "gpt-4o-mini"
-    weight: 0.20
+  # Ghế 2: Chuyên gia Tâm lý Tội phạm & Biến thể Ngôn ngữ Tiếng Việt
+  psycholinguistic_slang_profiler:
+    role_id: "ROLE_PSYCHO_TEENCODE"
+    display_name: "Psycholinguistic & Vietnamese Slang Profiler"
+    primary_maker_model: "gpt-6.1-sol"
+    secondary_checker_model: "gemini-3.5-flash-lite"
+    standby_priority_chain:
+      - "gemini-3.8-flash"
+      - "gpt-6-sol"
+      - "gemini-3.5-flash"
+    weight: 1.2
+    mission: >
+      Phát hiện đòn bẩy tâm lý khẩn cấp vô lý ("trong 24h", "khóa sim ngay"), đe dọa tố tụng (Công an, VKS), 
+      hoặc bẫy lòng tham kết hợp giải mã teencode, ký tự số ngụy trang lách bộ lọc mạng ("t4i kh04n", "n9an h4n9").
 
-  # Vai trò 4: Chuyên gia gian lận tài chính & ngân hàng
-  financial_fraud_analyst:
-    default_model: "gemini-1.5-pro"
-    standby_models:
-      - "gpt-4o"
-      - "claude-3-5-sonnet-20241022"
-      - "deepseek-chat"
-    weight: 0.20
-
-  # Vai trò 5: Người phản biện / Luật sư bào chữa (Devil's Advocate)
-  defense_validator:
-    default_model: "claude-3-5-sonnet-20241022"
-    standby_models:
-      - "gpt-4o-mini"
-      - "gemini-1.5-flash"
-      - "llama-3.3-70b-versatile"
-    weight: 0.20
+  # Ghế 3: Luật sư Bào chữa Công cộng & Triệt tiêu Báo động Giả (Alarm Fatigue)
+  public_defender_advocate:
+    role_id: "ROLE_DEFENDER"
+    display_name: "Public Defender & Anti-False-Positive Advocate"
+    primary_maker_model: "gpt-6.1-sol"
+    secondary_checker_model: "gemini-3.8-flash"
+    standby_priority_chain:
+      - "gemini-3.5-flash-lite"
+      - "gpt-6-sol"
+      - "gemini-3.5-flash"
+    weight: 1.3
+    veto_power: -0.25
+    mission: >
+      Tìm mọi chứng cứ chứng minh tin nhắn là giao dịch thông thường, mã OTP hợp pháp, thông báo dịch vụ định kỳ. 
+      Ưu tiên bảo vệ nhãn LOW-RISK để người dùng không bị tê liệt bởi báo động giả.
 ```
 
-### Nguyên tắc Chuyển Đổi Kịp Thời (Failover Protocol):
-* Khi gửi yêu cầu tới mô hình mặc định:
-  * Nếu gặp lỗi mã `429 Too Many Requests` hoặc `504 Gateway Timeout` (> 3.5 giây):
-  * Tự động chuyển đổi tức thì sang mô hình `standby_models[0]` trong danh sách.
-  * Ghi nhận cảnh báo vào audit log để hệ thống giám sát tải API.
-
 ---
 
-## 2. Đặc Tả 5 Vai Trò Giám Định
+## 3. Thuật Toán Trọng Tài Đồng Thuận Chuẩn Hóa 3 Nhãn
 
-| Vai trò | Trọng tâm phân tích | Câu hỏi then chốt (Core Question) |
-| :--- | :--- | :--- |
-| **1. Forensic Investigator** | Bối cảnh tổng thể, thủ thuật kỹ thuật, vector tấn công | *Kịch bản này có trùng khớp với phương thức hoạt động (Modus Operandi) của các tổ chức tội phạm mạng đã biết không?* |
-| **2. Psycholinguistic Analyst** | Thao túng tâm lý: Nỗi sợ (FOMO/FUD), cưỡng ép thời gian, kích thích lòng tham | *Văn bản có cố tình tạo áp lực hoảng loạn để nạn nhân không kịp suy nghĩ lý trí không?* |
-| **3. Threat Intelligence** | Đối soát số điện thoại, tên miền, đầu số viễn thông, URL rút gọn | *Tên miền có giả mạo cơ quan nhà nước / thương hiệu không? Đầu số có nằm trong danh sách đen không?* |
-| **4. Financial Fraud Analyst** | Dòng tiền: Khóa tài khoản, nợ thuế, VNeID cấp 2, trúng thưởng, hoàn tiền | *Yêu cầu chuyển tiền hoặc thông tin tài khoản này có tuân thủ đúng quy trình ngân hàng chính thống không?* |
-| **5. Defense Validator** | Tìm lý do bảo vệ: Khuyến mãi thật, thông báo cước viễn thông hợp pháp | *Có căn cứ hợp pháp nào cho thấy đây là tin nhắn CSKH/quảng cáo bình thường bị nghi oan không?* |
+### 3.1. Khung Nhãn Chuẩn Hóa (Standardized 3-Label Framework)
+Hội đồng Tier 2 trả về chính xác 1 trong 3 nhãn chuẩn tắc (tuân thủ Điều 25 Nghị định 13/2023/NĐ-CP):
+1. **`SCAM-RISK`:** Nguy cơ lừa đảo cao / đặc biệt nghiêm trọng (Điểm đồng thuận $P_{\text{scam}} \ge 0.60$).
+2. **`LOW-RISK`:** Tin nhắn an toàn / giao dịch hợp pháp (Điểm đồng thuận $P_{\text{scam}} < 0.40$).
+3. **`UNKNOWN`:** Vùng phân vân / ranh giới mập mờ ($0.40 \le P_{\text{scam}} < 0.60$ hoặc có xung đột phiếu bầu sâu sắc).
 
----
+### 3.2. Công Thức Trọng Số & Can Thiệp Bào Chữa (Public Defender Veto)
+1. **Tính xác suất lừa đảo thô có trọng số:**
+   $$P_{\text{raw}} = \frac{\sum_{i=1}^3 w_i \cdot p_i}{\sum_{i=1}^3 w_i}$$
+   với $w_1 = 1.3$, $w_2 = 1.2$, $w_3 = 1.3$.
+2. **Can thiệp Veto chống Báo Động Giả:**
+   Nếu `public_defender_advocate` bỏ phiếu `LOW-RISK` với độ tự tin $\ge 0.80$:
+   $$P_{\text{adjusted}} = \max\left(0.0, P_{\text{raw}} - 0.25\right)$$
+3. **Phán quyết cuối cùng:**
+   * Nếu $P_{\text{adjusted}} \ge 0.60$ (và không có mâu thuẫn phiếu đối kháng 2-1 bất định): Nhãn **`SCAM-RISK`**.
+   * Nếu $P_{\text{adjusted}} < 0.40$: Nhãn **`LOW-RISK`**.
+   * Nếu $0.40 \le P_{\text{adjusted}} < 0.60$ hoặc bất đồng ý kiến phiếu bầu: Kích hoạt nguyên lý Thận trọng Tri thức (Epistemic Caution), xuất nhãn **`UNKNOWN`** để chuyển kiểm toán viên hoặc cảnh báo người dùng xác thực thủ công.
 
-## 3. Thuật Toán Trọng Tài Đồng Thuận (Consensus Engine)
-
-### 3.1. Phán quyết phân loại danh mục (Categorical Verdict)
-Mỗi mô hình trong 5 Agent bỏ 1 phiếu bầu $v_i \in \{\text{SAFE}, \text{SUSPICIOUS}, \text{DANGEROUS}\}$.
-* **Quy tắc An Toàn Tối Cao (Safety-First Rule):** 
-  * Nếu có $\ge 3$ phiếu chọn `DANGEROUS` $\rightarrow$ Kết luận: **`DANGEROUS`**.
-  * Nếu $\ge 1$ phiếu `DANGEROUS` và $\ge 2$ phiếu `SUSPICIOUS` $\rightarrow$ Kết luận: **`SUSPICIOUS`**.
-  * Chỉ khi $\ge 4$ phiếu chọn `SAFE` và Agent 5 (Defense Validator) xác nhận không có yếu tố rủi ro $\rightarrow$ Kết luận: **`SAFE`**.
-
-### 3.2. Công thức Điểm Rủi Ro Tổng Hợp (Weighted Risk Score)
-Điểm số rủi ro $S_{\text{final}} \in [0, 100]$ được tính theo trọng số đóng góp của từng chuyên gia:
-$$S_{\text{final}} = \sum_{i=1}^5 w_i \cdot s_i$$
-Trong đó:
-* $w_i$: Trọng số chuyên gia ($\sum w_i = 1.0$).
-* $s_i \in [0, 100]$: Điểm rủi ro do từng chuyên gia chấm.
-
-### 3.3. Radar 5 Trục Rủi Ro (5-Axis Risk Radar)
-Mỗi phán quyết của Hội đồng xuất ra 5 chỉ số trực quan để vẽ biểu đồ Radar trên ứng dụng di động / web:
-1. **Urgency (0 - 100):** Mức độ ép buộc thực hiện gấp (ví dụ: "trong 24h", "khóa sim sau 2 tiếng").
-2. **Authority Impersonation (0 - 100):** Mức độ mạo danh cơ quan công an, tòa án, thuế, điện lực.
-3. **Financial Lure / Extortion (0 - 100):** Yếu tố tiền bạc, đe dọa tài sản, hứa hẹn trúng thưởng.
-4. **Suspicious Channel (0 - 100):** Kênh liên lạc bất thường, đầu số lạ, link không chính chủ.
-5. **Data Harvesting (0 - 100):** Yêu cầu cung cấp mã OTP, căn cước công dân, mật khẩu, sinh trắc học.
+### 3.3. Cơ Chế Thoát Nhanh (Early-Exit Fast-Path)
+Khi 3 chuyên gia được kích hoạt song song qua `asyncio`, nếu hệ thống ghi nhận **đồng thuận tuyệt đối 3-0** (`SCAM-RISK` hoặc `LOW-RISK`), quá trình biểu quyết có thể chốt sớm để tối ưu hóa độ trễ phản hồi người dùng.

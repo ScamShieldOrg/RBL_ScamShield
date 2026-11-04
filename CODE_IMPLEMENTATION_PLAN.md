@@ -122,7 +122,7 @@ def _check_vote_contradiction(self, completed_results: List[Dict[str, Any]]) -> 
     ham_votes = sum(1 for r in completed_results if r["vote"] == "HAM")
     unknown_votes = sum(1 for r in completed_results if r["vote"] == "UNKNOWN")
     
-    # Nếu không có majority clear (>= 3 votes cùng loại trong 5 agents)
+    # Nếu không có majority clear (>= 2 votes cùng loại trong 3 agents hoặc mâu thuẫn)
     return max(scam_votes, ham_votes, unknown_votes) < 3
 
 def _compute_error_correlation(self, completed_results: List[Dict[str, Any]]) -> float:
@@ -181,7 +181,7 @@ from .pii_masking import PIIMasker
 if self.use_council and self.council:
     routing_reason = (
         f"Tầng 1 phân vân ({t1_confidence*100:.1f}% < {self.tau*100:.0f}%), rơi vào vùng rủi ro bỏ sót lừa đảo (FNR). "
-        f"Kích hoạt Tầng 2 (5-Agent Forensic Council) với cơ chế Early-Exit và phản biện chống Alarm Fatigue."
+        f"Kích hoạt Tầng 2 (Consolidated 3-Agent Forensic Council) với cơ chế Early-Exit và phản biện chống Alarm Fatigue."
     )
     logger.info(f"Escalating message to Tier 2 Forensic Council. Reason: {fallback_trigger}")
     

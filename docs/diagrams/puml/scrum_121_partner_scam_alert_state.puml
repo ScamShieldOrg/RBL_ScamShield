@@ -1,0 +1,76 @@
+@startuml scrum_121_partner_scam_alert_state
+skinparam monochrome true
+skinparam linetype ortho
+skinparam roundcorner 4
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+title State Machine Diagram: Partner Scam Alert & Indicator Review (SCRUM-121)
+
+[*] --> SubmissionPendingReview : Partner submits threat alert feed with IOC payload
+
+state SubmissionPendingReview {
+    SubmissionPendingReview : - Status: PENDING
+    SubmissionPendingReview : - Stored in partner_official_alerts
+    SubmissionPendingReview : - IOC indicators parsed (URL, phone, bank account)
+}
+
+SubmissionPendingReview --> UnderReview : Threat triage dispatcher assigns analyst
+
+state UnderReview {
+    UnderReview : - Telemetry validation
+    UnderReview : - Cross-referencing threat database
+    UnderReview : - False-positive risk evaluation
+}
+
+UnderReview --> Rejected : [False alarm, malformed IOC, or unverified feed] Reject submission
+UnderReview --> VerifiedIntelligence : [Threat telemetry and authenticity confirmed] Verify submission
+
+state Rejected {
+    Rejected : - Status: REJECTED
+    Rejected : - Audit log recorded with rejection rationale
+    Rejected : - Quality score penalty applied to feed source
+}
+
+state VerifiedIntelligence {
+    VerifiedIntelligence : - Status: VERIFIED
+    VerifiedIntelligence : - Official alert marked as legitimate
+    VerifiedIntelligence : - Evaluate indicator presence in database
+}
+
+VerifiedIntelligence --> ExistingIndicatorUpdated : [IOC already exists in indicator database]
+VerifiedIntelligence --> CandidateCreated : [Zero-day IOC not present in database]
+
+state ExistingIndicatorUpdated {
+    ExistingIndicatorUpdated : - Increment indicator confidence score
+    ExistingIndicatorUpdated : - Append partner evidence reference ID
+    ExistingIndicatorUpdated : - Extend indicator Time-To-Live (TTL)
+    ExistingIndicatorUpdated : - Escalate threat severity level if applicable
+}
+
+state CandidateCreated {
+    CandidateCreated : - Status: CANDIDATE
+    CandidateCreated : - Stored in candidate triage queue
+    CandidateCreated : - Awaiting senior analyst or council confirmation
+}
+
+CandidateCreated --> Confirmed : [Candidate verified and approved by senior review]
+CandidateCreated --> CandidateDiscarded : [Candidate deemed benign or low confidence]
+
+state Confirmed {
+    Confirmed : - Status: APPROVED_ACTIVE
+    Confirmed : - Promoted to global ScamShield Blacklist
+    Confirmed : - Broadcast partner alert to community clients
+}
+
+state CandidateDiscarded {
+    CandidateDiscarded : - Status: DISCARDED
+    CandidateDiscarded : - IOC cataloged as monitored-only
+}
+
+ExistingIndicatorUpdated --> [*]
+Confirmed --> [*]
+Rejected --> [*]
+CandidateDiscarded --> [*]
+
+@enduml

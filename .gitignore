@@ -78,3 +78,15 @@ team-synthesis/*.docx
 *.db
 *.sqlite
 *.sqlite3
+
+
+# External research skills source archives (centrally managed in ~/.agents/sources)
+academic-research-skills*/
+
+# Temporary scratch and internal agent files
+.agents/
+.ua/
+zinG31j6
+dump_template.txt
+template_paras.txt
+

@@ -173,3 +173,8 @@ def simulate_3agent_dataflow(message: str):
 if __name__ == "__main__":
     test_sms = "Quý khách chưa cập nhật sinh trắc học nên tài khoản Vietcombank sẽ tạm ngưng giao dịch từ ngày mai. Vui lòng liên hệ [NUMBER] để được hỗ trợ cập nhật."
     simulate_3agent_dataflow(test_sms)
+
+
+def test_council_dataflow_execution():
+    msg = 'Quý khách chưa cập nhật sinh trắc học nên tài khoản Vietcombank sẽ tạm ngưng giao dịch từ ngày mai.'
+    simulate_3agent_dataflow(msg)

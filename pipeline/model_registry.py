@@ -107,9 +107,9 @@ class ModelRegistry:
                 "exclusions": ["embedding", "tts", "audio", "imagen", "vision-only", "robotics", "aqa"],
             },
             "bootstrap_fallbacks": {
-                "lite": "gemini-2.5-flash-lite",
-                "standard": "gemini-2.5-flash",
-                "pro": "gemini-2.5-pro",
+                "lite": "gemini-3.5-flash-lite",
+                "standard": "gemini-3.5-flash",
+                "pro": "gemini-3.8-flash",
             },
         }
 

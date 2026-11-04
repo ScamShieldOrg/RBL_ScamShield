@@ -1,0 +1,75 @@
+@startuml scrum_107_scam_report_state
+skinparam monochrome true
+skinparam linetype ortho
+skinparam roundcorner 4
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+title State Machine Diagram: Scam Report Management (SCRUM-107)
+
+[*] --> SubmissionPendingReview : User submits scam report with screenshot/message evidence
+
+state SubmissionPendingReview {
+    SubmissionPendingReview : - Status: PENDING
+    SubmissionPendingReview : - Stored in reports table
+    SubmissionPendingReview : - OCR & metadata parsed
+}
+
+SubmissionPendingReview --> UnderReview : Auto-triage dispatcher assigns moderator
+
+state UnderReview {
+    UnderReview : - Telemetry validation
+    UnderReview : - Deduplication check
+    UnderReview : - OCR evidence cross-match
+}
+
+UnderReview --> Rejected : [False alarm, malformed IOC, or invalid evidence] Dismiss report
+UnderReview --> VerifiedReport : [Threat authenticity and evidence verified] Verify report
+
+state Rejected {
+    Rejected : - Status: REJECTED
+    Rejected : - Audit log recorded with mandatory rejection reason
+    Rejected : - In-app notification sent to submitter
+}
+
+state VerifiedReport {
+    VerifiedReport : - Status: VERIFIED
+    VerifiedReport : - Report marked as credible
+    VerifiedReport : - Check IOC duplicate in active investigation
+}
+
+VerifiedReport --> DuplicateMerged : [Identical IOC in active investigation]
+VerifiedReport --> CandidateCreated : [Zero-day or unique threat IOC]
+
+state DuplicateMerged {
+    DuplicateMerged : - Status: MERGED_DUPLICATE
+    DuplicateMerged : - Merged into parent report
+    DuplicateMerged : - Increment parent reportCountSignal (+1)
+}
+
+state CandidateCreated {
+    CandidateCreated : - Status: CANDIDATE
+    CandidateCreated : - Awaiting moderator final review & taxonomy assignment
+}
+
+CandidateCreated --> Confirmed : [Approved by moderator or council >= 0.70]
+CandidateCreated --> EscalatedLocked : [Target conflicts with partner whitelist]
+
+state Confirmed {
+    Confirmed : - Status: APPROVED_BLACKLIST
+    Confirmed : - Indicator published to ScamShield Blacklist
+    Confirmed : - Award +50 reputation points to submitter
+}
+
+state EscalatedLocked {
+    EscalatedLocked : - Status: ESCALATED_LOCKED
+    EscalatedLocked : - Auto-locked to protect whitelist asset
+    EscalatedLocked : - Case escalated for administrator adjudication
+}
+
+Rejected --> [*]
+DuplicateMerged --> [*]
+Confirmed --> [*]
+EscalatedLocked --> [*]
+
+@enduml
