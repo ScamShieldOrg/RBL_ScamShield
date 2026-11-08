@@ -1,0 +1,5 @@
+Stage,Student SLM,Paper Acc (%),Kaggle Acc (%),Paper Recall (%),Kaggle Recall (%),Paper F1 (%),Kaggle F1 (%)
+Stage 1: Zero-Shot Baseline (Table I),Qwen/Qwen2.5-0.5B-Instruct,49.8,50.0,0.27,99.87,0.53,66.64
+Stage 1: Zero-Shot Baseline (Table I),HuggingFaceTB/SmolLM2-135M-Instruct,46.85,50.0,45.11,0.13,46.0,0.27
+"Stage 2/3: LoRA r=32, alpha=64 (Table II/III)",Qwen/Qwen2.5-0.5B-Instruct,92.1,97.66,92.5,96.64,92.13,97.63
+"Stage 2/3: LoRA r=32, alpha=64 (Table II/III)",HuggingFaceTB/SmolLM2-135M-Instruct,94.31,94.31,95.38,92.62,94.43,94.2
