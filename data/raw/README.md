@@ -7,17 +7,13 @@
 
 ## 1. Nguồn Dữ Liệu Gốc (Data Sources)
 
-Dữ liệu được thu thập và tổng hợp từ 2 kho ngữ liệu mở công khai trên Hugging Face Hub:
-1. **Nguồn chính thống 1:** `uitnlp/vietnamese-sms-dataset`
-   * **URL:** `https://huggingface.co/datasets/uitnlp/vietnamese-sms-dataset`
-   * **Tổ chức xuất bản:** UIT-NLP (Đại học Công nghệ Thông tin - ĐHQG TP.HCM).
-   * **Giấy phép (License):** Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
-   * **Ngày tải:** 2026-08-15.
-2. **Nguồn bổ sung 2:** `vietnamese_sms_phishing_sample_300`
-   * **URL:** Hugging Face Community Open Corpus.
-   * **Mô tả:** Tập mẫu tin nhắn SMS mạo danh thương hiệu, thông báo trúng thưởng và tin nhắn giả mạo biến thể mới.
-   * **Giấy phép (License):** Open Data Commons Attribution License (ODC-By).
-   * **Ngày tải:** 2026-08-18.
+Dữ liệu được thu thập và tổng hợp từ 2 bộ dữ liệu công khai trên Hugging Face Hub:
+1. **Nguồn 1:** `trannguyenthaituan/vietnamese_sms_dataset`
+   * **URL:** [https://huggingface.co/datasets/trannguyenthaituan/vietnamese_sms_dataset](https://huggingface.co/datasets/trannguyenthaituan/vietnamese_sms_dataset)
+2. **Nguồn 2:** `trannguyenthaituan/vietnamese_sms_phishing_sample`
+   * **URL:** [https://huggingface.co/datasets/trannguyenthaituan/vietnamese_sms_phishing_sample](https://huggingface.co/datasets/trannguyenthaituan/vietnamese_sms_phishing_sample)
+
+Tên bộ dữ liệu và URL ở trên phản ánh các nguồn được dùng trong quá trình thu thập. Hãy tham khảo trang Hugging Face tương ứng để biết thông tin mô tả, giấy phép và phiên bản hiện hành của từng bộ dữ liệu.
 
 ---
 
@@ -25,11 +21,12 @@ Dữ liệu được thu thập và tổng hợp từ 2 kho ngữ liệu mở c�
 
 | Tên tệp tin | Số lượng dòng | Cấu trúc các cột (Columns Schema) | Mục đích sử dụng |
 | :--- | :---: | :--- | :--- |
-| **`vietnamese_sms_merged_all.csv`** | **$2.665$ mẫu** | `message_id`, `message`, `label`, `source` | **Tập dữ liệu tổng hợp chính thức** sau khi tiền xử lý và loại bỏ bản ghi trùng lặp. |
-| **`vietnamese_sms_test.csv`** | $267$ mẫu | `message`, `label` | **Tập Frozen Test Set** niêm phong cố định ($192$ Ham, $75$ Scam) dùng cho mọi mô hình. |
-| `hf_vietnamese_sms_dataset.csv` | $5.983$ mẫu | `message_id`, `date`, `message`, `label` | Bản sao thô nguyên gốc từ Hugging Face. |
-| `hf_vietnamese_sms_phishing_sample_300.csv` | $601$ mẫu | `message_id`, `text` | Tập mẫu bổ sung lừa đảo thực tế. |
-| `vietnamese_sms_full.csv` | $2.991$ mẫu | `message_id`, `date`, `message`, `label` | Tập dữ liệu hợp nhất trung gian trước khi deduplication. |
+| **`vietnamese_sms_merged_all.csv`** | **2.664 mẫu** | `message_id`, `message`, `label`, `source` | Corpus hợp nhất đã xử lý; 2.664 nội dung duy nhất, gồm 2.629 mẫu từ `vietnamese_sms_dataset` và 35 mẫu từ `vietnamese_sms_phishing_sample`. |
+| `vietnamese_sms_test.csv` | 597 mẫu | `message`, `label` | Tệp test có sẵn trong thư mục raw (439 nhãn 0, 158 nhãn 1); có 31 nội dung trùng. **Không phải** frozen holdout N=267. |
+| `hf_vietnamese_sms_dataset.csv` | 2.991 mẫu | `message_id`, `date`, `message`, `label` | Bản dữ liệu nguồn lưu trong repo; 2.193 nhãn 0, 798 nhãn 1. Có 2.630 nội dung duy nhất (361 dòng trùng nội dung). |
+| `hf_vietnamese_sms_phishing_sample_300.csv` | 300 mẫu | `message_id`, `text` | Bản dữ liệu nguồn lưu trong repo; không có cột nhãn. Có 213 nội dung duy nhất (87 dòng trùng nội dung). |
+| `vietnamese_sms_full.csv` | 2.991 mẫu | `message_id`, `date`, `message`, `label` | Bản trung gian hiện có trong repo; 2.193 nhãn 0, 798 nhãn 1; 2.630 nội dung duy nhất (361 dòng trùng nội dung). |
+| `../processed/frozen_test_267.csv` | 267 mẫu | `original_index`, `message_id`, `message`, `label`, `source` | Frozen holdout thực tế (192 nhãn 0, 75 nhãn 1); 267 nội dung duy nhất. |
 
 ---
 
@@ -42,14 +39,16 @@ Dữ liệu được thu thập và tổng hợp từ 2 kho ngữ liệu mở c�
 
 ## 4. Phân Bổ Dữ Liệu & Quy Tắc Niêm Phong (Frozen Test Set Protocol)
 
-Tập dữ liệu hợp nhất $2.665$ mẫu (`vietnamese_sms_merged_all.csv`) gồm:
+Tập dữ liệu hợp nhất **2.664 mẫu** (`vietnamese_sms_merged_all.csv`) gồm:
 * **Ham (Nhãn 0):** $1.918$ tin nhắn ($72.0\%$).
-* **Scam (Nhãn 1):** $747$ tin nhắn ($28.0\%$).
+* **Scam (Nhãn 1):** $746$ tin nhắn ($28.0\%$).
 
 ### Phân Tách Tập Dữ Liệu Cố Định:
 Toàn bộ quy trình phân tách sử dụng kỹ thuật phân tầng (*Stratified Split*) với seed cố định: `random_state = 42`:
-* **Tập Huấn luyện & Validation nội bộ ($90\%$):** $2.398$ mẫu ($1.726$ Ham, $672$ Scam).
-* **Tập Kiểm thử Đóng băng (Frozen Test Set, $10\%$):** **$267$ mẫu** ($192$ Ham, $75$ Scam).
+* **Tập Huấn luyện & Validation nội bộ ($90\%$):** $2.397$ mẫu ($1.726$ Ham, $671$ Scam).
+* **Tập Kiểm thử Đóng băng (Frozen Test Set, xấp xỉ $10\%$):** **267 mẫu** ($192$ nhãn 0, $75$ nhãn 1), lưu tại `data/processed/frozen_test_267.csv`.
+
+`data/raw/vietnamese_sms_test.csv` là một tệp khác (597 dòng), không phải frozen holdout nêu trên. Các số liệu trong bảng được đếm trực tiếp từ những CSV hiện có trong repo; chúng mô tả snapshot cục bộ và không khẳng định số dòng hiện tại trên Hugging Face.
 
 > [!CRITICAL]
 > **Quy tắc niêm phong (Frozen Isolation Rule):**  
