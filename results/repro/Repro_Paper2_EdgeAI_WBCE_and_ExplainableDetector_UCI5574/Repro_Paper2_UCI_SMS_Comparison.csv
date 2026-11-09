@@ -1,0 +1,7 @@
+Model,Spam Recall (%),F1 (%),Footprint (MB),CPU Latency (ms),CPU Latency P95 (ms),Type
+BiGRU + WBCE (H. C. Phap 2026),83.89,89.61,3.86,2.631,4.589,Proposed Edge Architecture
+DistilBERT (H. C. Phap 2026 baseline),95.97,96.3,255.45,48.972,77.632,Official Transformer Baseline
+TF-IDF + LR (Supplementary),82.55,90.44,0.21,0.843,0.942,Supplementary Baseline
+TF-IDF + Linear SVM (Supplementary),92.62,95.83,0.21,0.625,0.741,Supplementary Baseline
+TF-IDF + Random Forest (Supplementary),83.22,90.84,6.21,7.765,9.176,Supplementary Baseline
+TF-IDF + XGBoost (Supplementary),85.91,91.76,0.31,1.196,1.301,Supplementary Baseline
