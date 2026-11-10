@@ -117,6 +117,7 @@ nb1_cells = [
 !pip install -q transformers datasets evaluate scikit-learn accelerate sentencepiece
 
 import inspect
+import json
 import os
 import random
 import numpy as np
@@ -284,6 +285,7 @@ for _task in BENCHMARK_TASKS:
     make_cell(
         "code",
         """# Cell 3: Multi-Seed Replication Pipeline with Dev Checkpoint Selection
+import gc
 import time
 
 MODELS = ["xlm-roberta-base", "vinai/phobert-base", "uitnlp/visobert"]
@@ -322,6 +324,18 @@ def measure_cpu_latency(model, tokenizer, texts, max_length=128, warmup=20, reps
 results_log = []
 raw_predictions = {}
 
+# --- Resume support: skip runs already written to RUN_LOG and reuse their preds CSV ---
+_log_rows = []
+if os.path.exists(RUN_LOG):
+    with open(RUN_LOG, encoding="utf-8") as _f:
+        for _line in _f:
+            try:
+                _log_rows.append(json.loads(_line))
+            except Exception:
+                pass
+_done = {(r["task"], r["model"], r["seed"]) for r in _log_rows}
+print(f"[resume] {len(_done)} run(s) already logged")
+
 for task in BENCHMARK_TASKS:
     train_df, val_df, test_df, num_labels, source_repo = load_official_uit_dataset(task)
     raw_predictions[task] = {}
@@ -331,6 +345,22 @@ for task in BENCHMARK_TASKS:
         raw_predictions[task][model_name] = {}
 
         for seed in SEEDS:
+            if (task, model_name, seed) in _done:
+                _p = f"Repro_Paper1_preds_{task}_{model_name.replace('/', '_')}_s{seed}.csv"
+                if os.path.exists(_p):
+                    raw_predictions[task][model_name][seed] = pd.read_csv(_p)["pred"].values
+                    _rec = next((r for r in _log_rows
+                                 if (r["task"], r["model"], r["seed"]) == (task, model_name, seed)),
+                                None)
+                    if _rec:
+                        results_log.append(_rec)
+                        seed_metrics.append((_rec["macro_f1"], _rec["weighted_f1"],
+                                             _rec["accuracy"]))
+                    print(f"[skip] {model_name} | seed {seed} (already done)")
+                else:
+                    print(f"[warn] logged but preds file missing: {model_name} s{seed} -> rerun")
+                continue
+
             print(f"\\n>>> Fine-tuning {model_name} on {task} (Seed: {seed}) <<<")
             set_deterministic_seed(seed)
             tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -442,6 +472,12 @@ for task in BENCHMARK_TASKS:
                 f"Repro_Paper1_preds_{task}_{model_name.replace('/', '_')}_s{seed}.csv",
                 index=False,
             )
+
+            # Free VRAM before the next run: 9 sequential fine-tunes otherwise fragment
+            # the caching allocator and OOM around run 5-9.
+            del model, trainer
+            gc.collect()
+            torch.cuda.empty_cache()
 
         m_vals = [m[0] for m in seed_metrics]
         target_mf1 = PUBLISHED_TABLE4[task][model_name]["MF1"]
