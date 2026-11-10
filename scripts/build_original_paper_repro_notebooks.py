@@ -114,7 +114,7 @@ nb1_cells = [
     make_cell(
         "code",
         """# Cell 1: Environment Setup, Deterministic Seeding & Version Shims
-!pip install -q transformers datasets evaluate scikit-learn accelerate
+!pip install -q transformers datasets evaluate scikit-learn accelerate sentencepiece
 
 import inspect
 import os
@@ -368,6 +368,19 @@ for task in BENCHMARK_TASKS:
                 seed=seed,
             )
             train_args_kwargs[EVAL_STRATEGY_KEY] = "epoch"
+            # transformers 5.x dropped several 4.x TrainingArguments fields (e.g. adam_epsilon).
+            # Drop anything this installed version does not accept instead of dying mid-run.
+            _supported = set(getattr(TrainingArguments, "__dataclass_fields__", {}))
+            if _supported:
+                _dropped = {k: v for k, v in train_args_kwargs.items() if k not in _supported}
+                if _dropped:
+                    print(f"[compat] transformers {__import__('transformers').__version__} "
+                          f"does not accept: {sorted(_dropped)} -> dropped")
+                train_args_kwargs = {k: v for k, v in train_args_kwargs.items()
+                                     if k in _supported}
+            if "fp16" not in train_args_kwargs:
+                print("[compat] fp16 not applied on this version -> training in fp32 "
+                      "(slower; record this in the report)")
             training_args = TrainingArguments(**train_args_kwargs)
 
             trainer = build_trainer(
