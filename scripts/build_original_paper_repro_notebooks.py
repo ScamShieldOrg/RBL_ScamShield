@@ -114,7 +114,10 @@ nb1_cells = [
     make_cell(
         "code",
         """# Cell 1: Environment Setup, Deterministic Seeding & Version Shims
-!pip install -q transformers datasets evaluate scikit-learn accelerate sentencepiece
+# Kaggle's image ships transformers 5.x, whose build is incompatible with its own torch
+# (torch._utils missing) -> AutoTokenizer cannot even be imported. Pin 4.x for this notebook.
+!pip uninstall -y -q transformers
+!pip install --no-cache-dir -q "transformers>=4.50,<5" "accelerate>=0.34" datasets evaluate scikit-learn sentencepiece
 
 import inspect
 import json
@@ -147,6 +150,11 @@ set_deterministic_seed(42)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Device: {device} | CUDA Available: {torch.cuda.is_available()}")
 print(f"transformers: {__import__('transformers').__version__}")
+assert __import__("transformers").__version__.split(".")[0] == "4", (
+    "Expected transformers 4.x. The two pip lines above must run, then "
+    "Runtime -> Restart Session, then run this cell again."
+)
+print("AutoTokenizer import: OK")
 
 # --- transformers version shims (4.x vs 5.x) ---
 TA_FIELDS = getattr(TrainingArguments, "__dataclass_fields__", {})
