@@ -110,8 +110,11 @@ class ForensicCouncil:
 
         logger.info(
             f"ForensicCouncil initialized with {len(self.specialists)} specialists. "
-            f"Early-Exit = {self.config.get('council_metadata', {}).get('early_exit_enabled', True)}"
+            f"Early-Exit = {self.config.get('council_metadata', {}).get('early_exit_enabled', True)} | "
+            f"Provider Keys Configured: Gemini={bool(self.gemini_api_key)}, VIBI/OpenAI={bool(self.openai_api_key)}, Groq={bool(self.groq_api_key)}"
         )
+        if not (self.gemini_api_key or self.openai_api_key or self.groq_api_key):
+            logger.info("No cloud provider keys configured. Operating in deterministic local heuristic fallback mode.")
 
     def _load_config(self) -> Dict[str, Any]:
         try:
