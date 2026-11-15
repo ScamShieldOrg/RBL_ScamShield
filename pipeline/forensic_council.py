@@ -514,31 +514,54 @@ Bắt buộc trả về định dạng JSON thuần túy theo schema sau:
                 if not t.done():
                     t.cancel()
 
-        # Weighted Consensus Calculation (Borda Count & Public Defender Rules)
-        total_weight = sum(r["weight"] for r in completed_results)
-        weighted_scam_prob = sum(r["weight"] * r["scam_prob"] for r in completed_results) / (total_weight or 1.0)
-        
-        # Check Public Defender Advocate input
-        pd_result = next((r for r in completed_results if r["role_key"] == "public_defender_advocate"), None)
-        defender_intervened = False
-        if pd_result and pd_result["vote"] in ["LOW-RISK", "BENIGN"]:
-            # Public Defender strongly defends legitimacy -> Apply anti-false-alarm boost
-            veto_boost = self.consensus_rules.get("public_defender_veto_boost", 0.25)
-            weighted_scam_prob = max(0.0, weighted_scam_prob - veto_boost)
-            defender_intervened = True
-            logger.info("Public Defender intervened: Reduced scam probability to avoid False Positive Alarm Fatigue.")
+        return self._compute_consensus(completed_results, start_overall, early_exit_triggered, message=message)
 
-        # Determine Final Label (SCAM-RISK, LOW-RISK, UNKNOWN)
-        scam_votes = sum(1 for r in completed_results if r["vote"] == "SCAM-RISK")
-        ham_votes = sum(1 for r in completed_results if r["vote"] == "LOW-RISK")
+    def _compute_consensus(
+        self,
+        completed_results: List[Dict[str, Any]],
+        start_overall: float = 0.0,
+        early_exit_triggered: bool = False,
+        message: str = "",
+    ) -> Dict[str, Any]:
+        """Compute Weighted Borda Consensus and Multi-Perspective synthesis across specialist findings."""
+        total_weight = sum(r.get("weight", 1.0) for r in completed_results)
+        weighted_scam_prob = sum(r.get("weight", 1.0) * r.get("scam_prob", 0.0) for r in completed_results) / (total_weight or 1.0)
+        
+        # Check Public Defender Advocate input (proportional veto with investigator override guard)
+        pd_result = next((r for r in completed_results if r.get("role_key") == "public_defender_advocate"), None)
+        other_results = [r for r in completed_results if r.get("role_key") != "public_defender_advocate"]
+        defender_intervened = False
+        if pd_result and pd_result.get("vote") in ["LOW-RISK", "BENIGN"]:
+            pd_conf = float(pd_result.get("confidence", 0.0))
+            min_pd_conf = float(self.consensus_rules.get("public_defender_min_confidence", 0.75))
+            if pd_conf >= min_pd_conf:
+                investigators_strong_scam = (
+                    len(other_results) > 0 and
+                    all(r.get("vote") == "SCAM-RISK" and float(r.get("scam_prob", 0.0)) >= 0.75 for r in other_results)
+                )
+                if not investigators_strong_scam:
+                    max_veto = float(self.consensus_rules.get("public_defender_max_veto", 0.15))
+                    veto_amount = min(max_veto, weighted_scam_prob * 0.20)
+                    weighted_scam_prob = max(0.0, weighted_scam_prob - veto_amount)
+                    defender_intervened = True
+                    logger.info(f"Public Defender intervened: Proportionally reduced scam probability by {veto_amount:.4f}.")
+                else:
+                    logger.info("Public Defender dissent noted, but suppressed due to overwhelming investigator consensus.")
+
+        scam_votes = sum(1 for r in completed_results if r.get("vote") == "SCAM-RISK")
+        ham_votes = sum(1 for r in completed_results if r.get("vote") == "LOW-RISK")
         unanimous_thresh = self.consensus_rules.get("unanimous_scam_threshold", 0.85)
         scam_risk_thresh = self.consensus_rules.get("scam_risk_threshold", self.consensus_rules.get("suspected_scam_threshold", 0.60))
         low_risk_thresh = self.consensus_rules.get("low_risk_threshold", self.consensus_rules.get("ham_threshold", 0.40))
         
-        # Check for vote contradiction / tie / ambiguity
-        vote_contradiction = (scam_votes > 0 and ham_votes > 0 and abs(scam_votes - ham_votes) <= 1)
+        # In a 3-agent council, 2-1 majority with weighted_scam_prob >= scam_risk_thresh is valid SCAM.
+        # Contradiction triggers when votes are tied or margin is ambiguous (scam_prob < scam_risk_thresh).
+        vote_contradiction = (
+            scam_votes > 0 and ham_votes > 0 and
+            (abs(scam_votes - ham_votes) == 0 or (abs(scam_votes - ham_votes) <= 1 and weighted_scam_prob < scam_risk_thresh))
+        )
 
-        if weighted_scam_prob >= scam_risk_thresh and not (vote_contradiction and weighted_scam_prob < 0.68):
+        if weighted_scam_prob >= scam_risk_thresh and not vote_contradiction:
             final_label = "SCAM-RISK"
             risk_level = "CRITICAL" if weighted_scam_prob >= unanimous_thresh else "HIGH"
         elif weighted_scam_prob < low_risk_thresh and not vote_contradiction:
@@ -548,9 +571,8 @@ Bắt buộc trả về định dạng JSON thuần túy theo schema sau:
             final_label = "UNKNOWN"
             risk_level = "MEDIUM"
 
-        total_elapsed_ms = (time.perf_counter() - start_overall) * 1000
+        total_elapsed_ms = (time.perf_counter() - start_overall) * 1000 if start_overall > 0 else 0.0
 
-        # Synthesize Multi-Perspective Rationale
         role_vn_map = {
             "ROLE_CYBER_BANK": "Chuyên gia AI Pháp Y Tài Chính & Dòng Tiền",
             "ROLE_PSYCHO_TEENCODE": "Chuyên gia AI Tâm Lý & Thao Túng Xã Hội",
@@ -559,7 +581,7 @@ Bắt buộc trả về định dạng JSON thuần túy theo schema sau:
         analyses = []
         for r in completed_results:
             display_title = role_vn_map.get(r.get("role_id"), r.get("display_name", "Chuyên gia AI"))
-            analyses.append(f"- **{display_title} ({r['model_used']})**: {r['analysis']}")
+            analyses.append(f"- **{display_title} ({r.get('model_used', 'gpt-6.1-sol')})**: {r.get('analysis', '')}")
 
         conclusion_map = {
             "SCAM-RISK": "🚨 NGUY CƠ LỪA ĐẢO (SCAM-RISK)",
@@ -575,19 +597,73 @@ Bắt buộc trả về định dạng JSON thuần túy theo schema sau:
 
         total_api_calls = sum(r.get("api_calls_count", 0) for r in completed_results)
 
+        computed_scam_type = "Thông báo dịch vụ & Không phát hiện lừa đảo"
+        if final_label == "SCAM-RISK":
+            msg_lower = (message or "").lower()
+            has_bank = any("bank" in r.get("role_id", "").lower() and r.get("vote") == "SCAM-RISK" for r in completed_results)
+            has_psycho = any("psycho" in r.get("role_id", "").lower() and r.get("vote") == "SCAM-RISK" for r in completed_results)
+            has_url = any("url" in r.get("key_cues", []) or "link" in str(r.get("analysis", "")).lower() for r in completed_results) or ("http" in msg_lower or any(tld in msg_lower for tld in [".com", ".vn", ".top", ".xyz", ".me"]))
+
+            if any(kw in msg_lower for kw in ["tặng code", "giftcode", "cược", "tài xỉu", "nổ hũ", "casino", "trúng thưởng"]):
+                computed_scam_type = "Dấu hiệu tin nhắn rác & Dụ dỗ nhận thưởng trái phép"
+            elif has_bank or any(kw in msg_lower for kw in ["vietcombank", "bidv", "vietinbank", "mbbank", "techcombank", "khóa thẻ", "sinh trắc học", "qđ 2345"]):
+                computed_scam_type = "Mạo danh liên kết ngân hàng & Đe dọa khóa tài khoản"
+            elif any(kw in msg_lower for kw in ["mượn tiền", "cấp cứu", "bệnh viện", "chuyển khoản gấp"]):
+                computed_scam_type = "Dấu hiệu thao túng tâm lý & Mạo danh người quen mượn tiền"
+            elif has_url:
+                computed_scam_type = "Dấu hiệu tin nhắn rác & Dẫn dụ truy cập liên kết lạ"
+            elif has_psycho:
+                computed_scam_type = "Thao túng tâm lý khẩn cấp & Giục chuyển tiền"
+            else:
+                computed_scam_type = "Dấu hiệu tin nhắn rác & Lừa đảo dụ dỗ người dùng"
+        elif final_label == "UNKNOWN":
+            computed_scam_type = "Nội dung chưa đủ căn cứ đánh giá an toàn"
+
+        council_deliberation = {}
+        for r in completed_results:
+            rk = r.get("role_key", "")
+            if "cyber" in rk or "bank" in rk or r.get("role_id") == "ROLE_CYBER_BANK":
+                council_deliberation["cyber_banking_specialist"] = {
+                    "stance": "SCAM" if r.get("vote") == "SCAM-RISK" else ("BENIGN" if r.get("vote") == "LOW-RISK" else "SUSPICIOUS"),
+                    "rationale": r.get("analysis", "Phân tích tài chính và hạ tầng kỹ thuật."),
+                    "model_used": r.get("model_used", "gpt-6.1-sol"),
+                }
+            elif "psycho" in rk or "teencode" in rk or r.get("role_id") == "ROLE_PSYCHO_TEENCODE":
+                council_deliberation["psycho_teencode_specialist"] = {
+                    "stance": "SCAM" if r.get("vote") == "SCAM-RISK" else ("BENIGN" if r.get("vote") == "LOW-RISK" else "SUSPICIOUS"),
+                    "manipulation_tactic": "Thao túng tâm lý khẩn cấp" if r.get("vote") == "SCAM-RISK" else "Không phát hiện yếu tố thao túng tâm lý",
+                    "rationale": r.get("analysis", "Phân tích ngôn ngữ biểu cảm và thủ thuật dẫn dụ."),
+                    "model_used": r.get("model_used", "gemini-3.8-flash"),
+                }
+            elif "defender" in rk or r.get("role_id") == "ROLE_DEFENDER":
+                council_deliberation["public_defender"] = {
+                    "stance": "SUSPICIOUS" if r.get("vote") == "UNKNOWN" else ("BENIGN" if r.get("vote") == "LOW-RISK" else "SCAM"),
+                    "exculpatory_evidence": "Rà soát bằng chứng ngoại phạm và kiểm soát rủi ro báo động sai.",
+                    "rationale": r.get("analysis", "Kiểm định khách quan bảo vệ tính xác thực."),
+                    "model_used": r.get("model_used", "gpt-6.1-sol"),
+                }
+        council_deliberation["final_synthesis"] = unified_rationale
+        council_deliberation["consensus_ratio"] = f"{len(completed_results)}/3 Chuyên gia AI đồng thuận"
+
+        total_cost = sum(r.get("cost_usd", 0.0) for r in completed_results)
+        if total_cost == 0.0:
+            total_cost = round(0.00015 * total_api_calls, 6)
+
         return {
             "message": message,
             "final_label": final_label,
+            "scam_type": computed_scam_type,
             "consensus_scam_prob": round(weighted_scam_prob, 4),
             "risk_level": risk_level,
             "total_latency_ms": round(total_elapsed_ms, 2),
             "early_exit_triggered": early_exit_triggered,
             "defender_intervened": defender_intervened,
             "total_api_calls": total_api_calls,
-            "specialist_votes": {r["role_key"]: r for r in completed_results},
+            "specialist_votes": {r.get("role_key", f"spec_{i}"): r for i, r in enumerate(completed_results)},
+            "council_deliberation": council_deliberation,
             "unified_rationale": unified_rationale,
             "active_council_size": len(completed_results),
-            "estimated_council_cost_usd": round(0.00015 * len(completed_results), 6),
+            "estimated_council_cost_usd": total_cost,
         }
 
     def evaluate_sync(self, message: str, active_roles: Optional[List[str]] = None) -> Dict[str, Any]:

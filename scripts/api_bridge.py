@@ -86,6 +86,16 @@ OFFICIAL_BANK_DOMAINS = [
     "vneid.gov.vn",
     "dichvucong.gov.vn",
     "bocongan.gov.vn",
+    "chinhphu.vn",
+    # Telecommunications
+    "mobifone.vn",
+    "viettel.vn",
+    "vietteltelecom.vn",
+    "vinaphone.com.vn",
+    "vnpt.vn",
+    "vnpt.com.vn",
+    "fpt.vn",
+    "fpt.com.vn",
 ]
 
 REGISTERED_BRANDNAMES = [
@@ -131,6 +141,10 @@ class ScanRequest(BaseModel):
     target_bank: Optional[str] = Field(None, description="Bank code if transferring funds")
     target_account_number: Optional[str] = Field(None, description="Target bank account number")
     force_tier2: Optional[bool] = Field(False, description="Force deep analysis through Forensic Council")
+    core_check_id: Optional[Any] = Field(None, description="Backend check id")
+    raw_input: Optional[str] = Field(None, description="Raw input text")
+    normalized_content: Optional[str] = Field(None, description="Normalized text")
+    extracted_entities: Optional[List[Dict[str, Any]]] = Field(None, description="Extracted IOC candidates")
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +152,25 @@ class ScanRequest(BaseModel):
 # ---------------------------------------------------------------------------
 def extract_deterministic_features(content: str, sender: Optional[str] = None) -> Dict[str, Any]:
     """Trích xuất bảng kiểm đặc trưng định lượng tại biên thiết bị."""
-    # 1. URL Analysis
-    url_pattern = r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*"
-    urls = re.findall(url_pattern, content)
+    # 1. URL Analysis (Catch both http(s):// and bare domains like wkwd.rugfd.com)
+    # Full URLs (with scheme or www.) are always accepted. Bare domains must end in a known,
+    # lowercase TLD so that missing spaces after a period ("khac.Do", "dich.Video") are not counted.
+    url_pattern = (
+        r"https?://[^\s<>\"']+"
+        r"|www\.[^\s<>\"']+"
+        r"|(?<![\w@.])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|info|biz|vn|io|co|me|to|cc|tv|xyz|top|vip|shop|online|site|club|app|link|live|store|asia|tk|ml|ga|cf|gq|icu|cyou|bond|sbs|click|fun|pro|win|bet|best|life|world|today|news|space|website|tech|dev|ly|gl|gd|in|us|uk|cn|ru)\b(?:/[^\s<>\"']*)?"
+    )
+    raw_matches = re.findall(url_pattern, content)
+
+    urls: List[str] = []
+    ignored_suffixes = {"e.g", "i.e", "tp.hcm", "tp.hn"}
+    for raw in raw_matches:
+        cleaned = raw.strip().rstrip(".,;:!?)'\"")
+        if cleaned and cleaned.lower() not in ignored_suffixes:
+            if not re.match(r"^\d+\.\d+$", cleaned) and "@" not in cleaned:
+                urls.append(cleaned)
+    urls = list(dict.fromkeys(urls))
+
     is_whitelist = True
     domain_reputation = "LEGITIMATE"
 
@@ -149,15 +179,22 @@ def extract_deterministic_features(content: str, sender: Optional[str] = None) -
         domain_reputation = "MALICIOUS_SIMILARITY"
         for u in urls:
             try:
-                parsed = urllib.parse.urlparse(u)
-                hostname = parsed.hostname or ""
+                full_url = u if "://" in u else f"http://{u}"
+                parsed = urllib.parse.urlparse(full_url)
+                hostname = (parsed.hostname or "").lower()
                 for official in OFFICIAL_BANK_DOMAINS:
                     if hostname == official or hostname.endswith("." + official):
                         is_whitelist = True
                         domain_reputation = "LEGITIMATE"
                         break
+                if is_whitelist:
+                    break
             except Exception:
                 pass
+
+    # Phone Analysis
+    phone_pattern = r"(?<!\d)(?:(?:\+84|0)[35789]\d{8}|(?:1800|1900)\d{4,6})(?!\d)"
+    detected_phones = list(dict.fromkeys([p.strip() for p in re.findall(phone_pattern, content)]))
 
     # 2. OTP Structure
     has_otp = bool(re.search(r"\b\d{6}\b", content) and re.search(r"(otp|ma\s+xac\s+thuc|code)", content, re.IGNORECASE))
@@ -190,6 +227,11 @@ def extract_deterministic_features(content: str, sender: Optional[str] = None) -
         "urgency_indicators": {
             "matched_keywords": matched_urgency,
             "urgency_score": urgency_score,
+        },
+        "phone_analysis": {
+            "detected_phones": detected_phones,
+            "is_official_hotline": any(p.startswith("1800") or p.startswith("1900") for p in detected_phones),
+            "phone_type": "HOTLINE" if any(p.startswith("1800") or p.startswith("1900") for p in detected_phones) else ("PERSONAL_MOBILE" if detected_phones else "NONE"),
         },
     }
 
@@ -236,6 +278,29 @@ def health_check():
 
 
 @app.post("/api/v1/scan")
+
+def _compute_radar_metrics(content: str, deterministic: Dict[str, Any], is_scam: bool) -> Dict[str, float]:
+    """Tính toán 5 trục radar rủi ro từ các tín hiệu trích xuất định lượng."""
+    urgency_score = float(deterministic.get("urgency_indicators", {}).get("urgency_score", 15.0 if is_scam else 5.0))
+    has_urls = len(deterministic.get("url_analysis", {}).get("detected_urls", [])) > 0
+    is_whitelist = deterministic.get("url_analysis", {}).get("is_in_official_whitelist", True)
+    has_otp = deterministic.get("otp_analysis", {}).get("otp_detected", False)
+    has_brand = any(b in content.upper() for b in REGISTERED_BRANDNAMES)
+
+    m_urgency = min(100.0, max(5.0, urgency_score + (25.0 if any(kw in content.lower() for kw in ["24h", "khóa", "ngay"]) else 0.0)))
+    m_authority = 75.0 if (has_brand and not is_whitelist) else (40.0 if has_brand else (15.0 if is_scam else 5.0))
+    m_lure = 80.0 if any(kw in content.lower() for kw in ["tặng", "thưởng", "tri ân", "lì xì", "hoa hồng", "tiền"]) else (20.0 if is_scam else 5.0)
+    m_channel = 85.0 if (has_urls and not is_whitelist) else (15.0 if has_urls else (10.0 if is_scam else 5.0))
+    m_harvest = 90.0 if (has_otp or any(kw in content.lower() for kw in ["đăng nhập", "mật khẩu", "cccd", "xác thực", "otp"])) else (20.0 if is_scam else 5.0)
+
+    return {
+        "urgency": round(m_urgency, 1),
+        "authority_impersonation": round(m_authority, 1),
+        "financial_lure": round(m_lure, 1),
+        "suspicious_channel": round(m_channel, 1),
+        "data_harvesting": round(m_harvest, 1),
+    }
+
 def scan_message(payload: ScanRequest):
     """
     Main evaluation endpoint: receives text message, runs 2-Tier cascaded classification,
@@ -294,7 +359,11 @@ def scan_message(payload: ScanRequest):
     if council_executed:
         consensus_prob = float(t2_telemetry.get("consensus_score", final_conf))
         risk_score = int(round(consensus_prob * 100))
-        if risk_score >= 75:
+        if is_unknown:
+            # Council ended in the uncertainty band: never relabel it as SAFE.
+            verdict_str = "UNKNOWN"
+            risk_level = "UNKNOWN"
+        elif risk_score >= 75:
             verdict_str = "DANGEROUS"
             risk_level = "DANGEROUS"
         elif risk_score >= 45:
@@ -347,32 +416,34 @@ def scan_message(payload: ScanRequest):
 
         if "psycholinguistic_slang_profiler" in votes or "psycho_teencode_specialist" in votes or "social_engineering_profiler" in votes:
             v = votes.get("psycholinguistic_slang_profiler") or votes.get("psycho_teencode_specialist") or votes.get("social_engineering_profiler", {})
+            tactic = v.get("manipulation_tactic") or ("Thao túng tâm lý / Dụ dỗ người dùng" if v.get("vote") == "SCAM-RISK" else "Không phát hiện yếu tố thao túng tâm lý")
             council_deliberation["psycho_teencode_specialist"] = {
                 "stance": "SCAM" if v.get("vote") == "SCAM-RISK" else ("BENIGN" if v.get("vote") == "LOW-RISK" else "SUSPICIOUS"),
-                "manipulation_tactic": "Bình phong khẩn cấp bệnh viện + Bị giật điện thoại",
-                "rationale": v.get("analysis", "Phân tích tâm lý: Kịch bản 'bị giật điện thoại' là bình phong nhằm hợp thức hóa số lạ và né tránh cuộc gọi đối chất trực tiếp."),
+                "manipulation_tactic": tactic,
+                "rationale": v.get("analysis", "Phân tích ngôn ngữ: Đánh giá ngữ cảnh biểu cảm và dấu hiệu dẫn dụ tâm lý trong văn bản."),
                 "model_used": v.get("model_used", "gemini-3.8-flash"),
             }
 
         if "public_defender_advocate" in votes or "public_defender" in votes:
             v = votes.get("public_defender_advocate") or votes.get("public_defender", {})
+            exculpatory = v.get("exculpatory_evidence") or ("Đối soát khách quan các yếu tố rủi ro và mã độc nhúng." if deterministic.get("url_analysis", {}).get("detected_urls") else "Tin nhắn không chứa liên kết web hay mã độc nhúng.")
             council_deliberation["public_defender"] = {
                 "stance": "SUSPICIOUS" if v.get("vote") == "UNKNOWN" else ("BENIGN" if v.get("vote") == "LOW-RISK" else "SCAM"),
-                "exculpatory_evidence": "Tin nhắn không chứa liên kết URL độc hại hay mã độc APK.",
-                "rationale": v.get("analysis", "Kiểm định khách quan: Dù không có mã độc nhưng có dấu hiệu mạo danh người quen. Khuyến nghị liên hệ xác thực trước khi chuyển tiền."),
+                "exculpatory_evidence": exculpatory,
+                "rationale": v.get("analysis", "Kiểm định khách quan: Rà soát bằng chứng ngoại phạm và kiểm soát rủi ro báo động sai (False Alarm)."),
                 "model_used": v.get("model_used", "gpt-6.1-sol"),
             }
 
         council_deliberation["final_synthesis"] = res.get("explanation", "Hệ thống AI hoàn tất đánh giá đa chiều.")
         council_deliberation["consensus_ratio"] = f"{len(votes)}/3 Chuyên gia AI đồng thuận"
 
-    # Actionable Steps Formulation
+    # Actionable Steps Formulation: Chuẩn hóa bộ hướng dẫn an toàn chung (không áp đặt QĐ 2345 khi không phải ngân hàng)
     if guidance_type == "STATIC_SOP":
         if is_scam:
             steps = [
-                "Ngân hàng không gửi link qua SMS để yêu cầu cập nhật sinh trắc học theo Quyết định 2345/QĐ-NHNN.",
-                "Khuyên bạn không nhấp vào liên kết lạ và không cung cấp mã OTP/mật khẩu.",
-                "Nếu đã lỡ nhập thông tin: Gọi ngay hotline ngân hàng để được hỗ trợ kiểm tra tài khoản.",
+                "Tuyệt đối không nhấp vào liên kết lạ hoặc quét mã QR trong tin nhắn.",
+                "Không nạp tiền, không cung cấp thông tin cá nhân/CCCD/OTP để nhận thưởng.",
+                "Chặn tin nhắn và chủ động báo cáo nội dung rác tới cơ quan chức năng.",
             ]
         else:
             steps = [
@@ -382,9 +453,9 @@ def scan_message(payload: ScanRequest):
             ]
     elif guidance_type == "DYNAMIC_CONTEXTUAL":
         steps = [
-            "Khuyến nghị chưa chuyển tiền vào số tài khoản được cung cấp trong tin nhắn.",
+            "Khuyến nghị chưa vội thực hiện bất kỳ giao dịch chuyển tiền nào.",
             "Nên gọi điện thoại trực tiếp vào số quen thuộc của người gửi để xác minh sự việc.",
-            "Hỏi lại thông tin riêng tư mà chỉ người thân biết nếu đối phương liên tục giục giã.",
+            "Chủ động chặn số và không nhấp vào bất kỳ đường dẫn nào gửi kèm.",
         ]
     else:  # EPISTEMIC_CAUTION
         steps = [
@@ -396,24 +467,58 @@ def scan_message(payload: ScanRequest):
     scan_id = f"SCAN-{provenance[:4]}-{int(time.time() * 1000)}"
     total_elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-    # Format citizen-centric scam type and summary (Strip all English terms)
+    # Phân loại ngữ cảnh chính xác cho cờ bạc / nhận thưởng / ngân hàng
+    content_lower = content.lower()
+    gambling_keywords = [
+        "tặng code", "tang code", "giftcode", "khuyến mãi", "khuyen mai",
+        "cược", "cuoc", "tài xỉu", "tai xiu", "nổ hũ", "no hu", "nhà cái", "nha cai",
+        "casino", "đánh bài", "danh bai", "trúng thưởng", "nhận thưởng", "nhan thuong",
+        "lì xì", "li xi", "trải nghiệm", "trai nghiem", "game bai", "đổi thưởng", "code tri gia"
+    ]
+    is_gambling = any(kw in content_lower for kw in gambling_keywords)
+
+    phishing_keywords = [
+        "khóa thẻ", "khoa the", "bị khóa", "bi khoa", "hết hạn", "het han",
+        "nâng cấp", "nang cap", "xác minh", "xac minh", "sinh trắc học", "sinh trac hoc",
+        "đóng băng", "dong bang", "cảnh báo đăng nhập", "canh bao dang nhap", "qđ 2345", "qd 2345"
+    ]
+    is_bank_phishing = any(kw in content_lower for kw in phishing_keywords)
+    is_emergency_borrow = any(kw in content_lower for kw in ["mượn tiền", "muon tien", "cấp cứu", "cap cuu", "bệnh viện", "benh vien", "giật điện thoại", "giat dien thoai"])
+
     computed_scam_type = res.get("scam_type")
     is_english = any(
         en_word in (computed_scam_type or "").lower()
-        for en_word in ["detected", "tier", "heuristic", "pattern", "legitimate", "message", "forensic", "council", "hội đồng"]
+        for en_word in ["detected", "tier", "heuristic", "pattern", "legitimate", "message", "forensic", "council", "hội đồng", "classifier"]
     )
-    if not computed_scam_type or is_english:
+    if provenance == 'TIER1_FAST_PATH' or not is_scam or not computed_scam_type or is_english:
         if is_unknown or provenance == "TRI_STATE_UNKNOWN":
             computed_scam_type = "Nội dung chưa đủ căn cứ đánh giá an toàn"
+        elif not is_scam:
+            if deterministic.get("url_analysis", {}).get("is_in_official_whitelist") and deterministic.get("url_analysis", {}).get("detected_urls"):
+                computed_scam_type = "Thông báo dịch vụ & Khuyến mãi chính thức"
+            else:
+                computed_scam_type = "Thông báo thông thường & Đáng tin cậy"
         elif is_scam:
-            if deterministic.get("url_analysis", {}).get("detected_urls"):
+            if is_gambling:
+                computed_scam_type = "Dấu hiệu tin nhắn rác & Dụ dỗ nhận thưởng trái phép"
+            elif is_bank_phishing or (deterministic.get("url_analysis", {}).get("detected_urls") and any(b in content.upper() for b in REGISTERED_BRANDNAMES)):
                 computed_scam_type = "Mạo danh liên kết ngân hàng & Đe dọa khóa tài khoản"
+            elif is_emergency_borrow:
+                computed_scam_type = "Dấu hiệu thao túng tâm lý & Mạo danh người quen mượn tiền"
+            elif deterministic.get("url_analysis", {}).get("detected_urls"):
+                computed_scam_type = "Dấu hiệu tin nhắn rác & Dẫn dụ truy cập liên kết lạ"
             elif deterministic.get("urgency_indicators", {}).get("urgency_score", 0) > 30:
                 computed_scam_type = "Thao túng tâm lý khẩn cấp & Giục chuyển tiền"
             else:
-                computed_scam_type = "Dấu hiệu thao túng tâm lý & Mạo danh người quen mượn tiền"
+                computed_scam_type = "Dấu hiệu tin nhắn rác & Lừa đảo dụ dỗ người dùng"
         else:
             computed_scam_type = "Thông báo biến động số dư & Mã OTP chính danh"
+
+    # Trình bày kỹ thuật trung thực khi Tier 1 phát hiện SCAM
+    if provenance == "TIER1_FAST_PATH" and is_scam:
+        summary_text = "Mô hình ngôn ngữ ViSoBERT Edge phát hiện cấu trúc tin nhắn có độ tương đồng cao với các tập dữ liệu rủi ro đã ghi nhận"
+    else:
+        summary_text = res.get("explanation", "")
 
     response_payload = {
         "status": "success",
@@ -433,10 +538,11 @@ def scan_message(payload: ScanRequest):
             "confidence_level": confidence_level,
             "confidence": round(final_conf, 4),
             "scam_type": computed_scam_type,
-            "summary": res.get("explanation", ""),
+            "summary": summary_text,
         },
+        "radar_metrics": _compute_radar_metrics(content, deterministic, is_scam),
         "deterministic_features": deterministic,
-        "council_deliberation": council_deliberation,
+        "council_deliberation": council_deliberation or res.get("council_deliberation"),
         "guidance_type": guidance_type,
         "actionable_steps": steps,
         "tier_executed": 2 if provenance == "TIER2_FORENSIC_COUNCIL" else 1,

@@ -140,7 +140,21 @@ class TwoTierRouter:
                 "final_confidence": t1_confidence,
                 "is_scam": (standardized_t1_label == "SCAM-RISK"),
                 "is_unknown": False,
-                "scam_type": "Mạo danh liên kết ngân hàng & Đe dọa khóa tài khoản" if standardized_t1_label == "SCAM-RISK" else "Thông báo giao dịch chính danh",
+                "scam_type": (
+                    (
+                        "Dấu hiệu tin nhắn rác & Dụ dỗ nhận thưởng trái phép"
+                        if any(kw in message.lower() for kw in ["tặng code", "giftcode", "cược", "tài xỉu", "nổ hũ", "casino", "trúng thưởng"])
+                        else "Mạo danh liên kết ngân hàng & Đe dọa khóa tài khoản"
+                        if any(kw in message.lower() for kw in ["vietcombank", "bidv", "vietinbank", "mbbank", "techcombank", "khóa thẻ", "sinh trắc học", "qđ 2345"])
+                        else "Dấu hiệu thao túng tâm lý & Mạo danh người quen mượn tiền"
+                        if any(kw in message.lower() for kw in ["mượn tiền", "cấp cứu", "bệnh viện", "chuyển khoản gấp"])
+                        else "Dấu hiệu tin nhắn rác & Dẫn dụ truy cập liên kết lạ"
+                        if ("http" in message.lower() or any(tld in message.lower() for tld in [".com", ".vn", ".top", ".xyz", ".me"]))
+                        else "Dấu hiệu tin nhắn rác & Lừa đảo dụ dỗ người dùng"
+                    )
+                    if standardized_t1_label == "SCAM-RISK"
+                    else "Thông báo dịch vụ & Xác minh an toàn"
+                ),
                 "risk_level": "HIGH" if standardized_t1_label == "SCAM-RISK" else "LOW",
                 "explanation": f"Xử lý trực tiếp tại thiết bị với độ tự tin {t1_confidence*100:.1f}% >= {self.tau*100:.0f}%.",
                 "routing_path": "TIER_1_DIRECT_FASTPATH",
@@ -180,7 +194,7 @@ class TwoTierRouter:
                     "final_confidence": council_res["consensus_scam_prob"],
                     "is_scam": (c_label == "SCAM-RISK"),
                     "is_unknown": (c_label == "UNKNOWN"),
-                    "scam_type": "Dấu hiệu thao túng tâm lý & Mạo danh người quen mượn tiền",
+                    "scam_type": council_res.get("scam_type", "Thông báo dịch vụ & Không phát hiện lừa đảo" if c_label != "SCAM-RISK" else "Dấu hiệu rủi ro đa chiều"),
                     "risk_level": council_res["risk_level"],
                     "explanation": council_res["unified_rationale"],
                     "routing_path": "TIER_2_FORENSIC_COUNCIL",
@@ -190,7 +204,7 @@ class TwoTierRouter:
                     "tier1_telemetry": tier1_summary,
                     "tier2_telemetry": {
                         "status": "EXECUTED",
-                        "architecture": "Multi-LLM Heterogeneous Council",
+                        "architecture": "3-Agent Multi-LLM Heterogeneous Council",
                         "consensus_score": council_res["consensus_scam_prob"],
                         "early_exit": council_res["early_exit_triggered"],
                         "defender_intervened": council_res["defender_intervened"],
@@ -199,6 +213,7 @@ class TwoTierRouter:
                         "fallback_trigger": fallback_trigger,
                         "specialist_votes": council_res["specialist_votes"],
                     },
+                    "council_deliberation": council_res.get("council_deliberation"),
                     "total_latency_ms": round(total_elapsed_ms, 2),
                     "total_cost_usd": council_res["estimated_council_cost_usd"],
                     "escalated": True,
@@ -300,6 +315,8 @@ class TwoTierRouter:
             "total_cost_usd": 0.0,
             "escalated": True,
         }
+
+    route = classify
 
     def classify_batch(self, messages: List[str]) -> List[Dict[str, Any]]:
         """Classify a batch of messages and record metrics."""
