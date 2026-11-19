@@ -1,0 +1,8 @@
+{
+  "model": "gemini/gemini-3.1-flash-lite",
+  "simulation": false,
+  "benchmark_samples": 200,
+  "paired_valid_samples": 191,
+  "missing_or_failed_samples": 9,
+  "exact_one_sided_mcnemar_p": 0.9713134765625
+}
