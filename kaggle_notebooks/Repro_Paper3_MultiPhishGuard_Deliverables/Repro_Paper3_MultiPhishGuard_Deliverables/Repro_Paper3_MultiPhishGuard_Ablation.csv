@@ -1,0 +1,3 @@
+Approach,TN,FP,FN,TP,N,Accuracy (%),Precision (%),Recall (%),F1 (%),FPR (%),FPR 95% CI,FDR (%),Recall 95% CI
+Arm A: Single Agent CoT (openai/gpt-4o-mini),124,26,38,12,200,68.0,31.58,24.0,27.27,17.33,11.65-24.36,68.42,13.06-38.17
+Arm B: Static-Weight Triad 0.3/0.4/0.3 (openai/gpt-4o-mini),149,1,45,5,200,77.0,83.33,10.0,17.86,0.67,0.02-3.66,16.67,3.33-21.81

@@ -1,0 +1,3 @@
+task,comparison,delta_mf1_pp,delta_ci95,p_value,significant,visobert_obs_mf1,visobert_boot_ci95,paper_target_mf1,within_equivalence_margin,rank_order_holds,p_bh_adjusted,significant_bh
+UIT-VSMEC,ViSoBERT vs vinai/phobert-base,5.73,"(0.95, 10.44)",0.0085,True,64.6,"(60.31, 68.52)",65.88,False,True,0.017,True
+UIT-VSMEC,ViSoBERT vs xlm-roberta-base,3.9,"(-0.84, 8.8)",0.0585,False,64.6,"(60.31, 68.52)",65.88,False,True,0.0585,False
