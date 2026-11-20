@@ -1,0 +1,3 @@
+Variant,TN,FP,FN,TP,N,Spam Recall (%),Precision (%),F1 (%),Accuracy (%),FPR (%)
+BiGRU + Standard BCE,964,2,25,124,1115,83.22,98.41,90.18,97.58,0.21
+BiGRU + WBCE,961,5,24,125,1115,83.89,96.15,89.61,97.4,0.52
